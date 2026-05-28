@@ -7,6 +7,7 @@
 #include "inc/hw_types.h"
 #include "inc/hw_ints.h"
 #include "inc/hw_i2c.h"
+#include "inc/hw_gpio.h"
 #include "driverlib/debug.h"
 #include "driverlib/gpio.h"
 #include "driverlib/pin_map.h"
@@ -63,6 +64,28 @@
 #define DEBOUNCE_TIME_MS 10
 #define LONG_PRESS_TIME_MS 3000
 #define REPEAT_PRESS_TIME_MS 200
+
+#define STEPPER_SYSTEM_CLOCK_HZ      20000000UL
+#define STEPPER_BEATS_PER_REVOLUTION 4096UL
+#define STEPPER_TARGET_RPM           1UL
+#define STEPPER_TIMER_LOAD           ((STEPPER_SYSTEM_CLOCK_HZ * 60UL) / (STEPPER_BEATS_PER_REVOLUTION * STEPPER_TARGET_RPM) - 1)
+
+#define STEPPER_PINS (GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3)
+
+static const uint8_t stepper_sequence[8] = {
+    0x01,  // Beat 1: PF0
+    0x03,  // Beat 2: PF0+PF1
+    0x02,  // Beat 3: PF1
+    0x06,  // Beat 4: PF1+PF2
+    0x04,  // Beat 5: PF2
+    0x0C,  // Beat 6: PF2+PF3
+    0x08,  // Beat 7: PF3
+    0x09,  // Beat 8: PF3+PF0
+};
+
+volatile uint16_t motor_position = 0;
+volatile uint8_t  motor_direction = 1;  // 0=forward, 1=reverse
+volatile uint8_t  motor_running = 1;    // 0=stopped, 1=running
 
 uint32_t ui32SysClock; // 系统时钟频率
 
@@ -217,6 +240,8 @@ void UARTInit(void);                                                            
 void UARTStringPutNOBlocking(uint32_t ui32Base, uint8_t *cMessage);                                                                                   // 非阻塞方式发送字符串
 static void UARTStringPutReversedNOBlocking(uint32_t ui32Base, uint8_t *cMessage);                                                                    // 非阻塞方式反向发送字符串
 void UARTCharPutBlocking(uint32_t ui32Base, uint8_t ucData);                                                                                          // 阻塞方式发送单个字符
+void StepperGPIOInit(void);                                                                                                                            // 初始化步进电机GPIO
+void StepperTimerInit(void);                                                                                                                          // 初始化步进电机Timer
 void PWMInit(void);                                                                                                                                   // 初始化PWM
 void PWMStart(uint32_t ui32Freq_Hz);                                                                                                                  // 启动PWM输出
 void PWMStop(void);                                                                                                                                   // 停止PWM输出
@@ -2209,6 +2234,82 @@ static void ProcessUartCommand(void)
         }
     }
 
+    // 处理 "*MOTOR:START" 命令 (启动步进电机)
+    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*MOTOR:START"))
+    {
+        if (num_parsed_tokens == current_param_idx)
+        {
+            motor_running = 1;
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Stepper motor started.\r\n");
+        }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *MOTOR:START\r\n");
+        }
+    }
+
+    // 处理 "*MOTOR:STOP" 命令 (停止步进电机)
+    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*MOTOR:STOP"))
+    {
+        if (num_parsed_tokens == current_param_idx)
+        {
+            motor_running = 0;
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Stepper motor stopped.\r\n");
+        }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *MOTOR:STOP\r\n");
+        }
+    }
+
+    // 处理 "*MOTOR:FWD" 命令 (设置步进电机正转)
+    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*MOTOR:FWD"))
+    {
+        if (num_parsed_tokens == current_param_idx)
+        {
+            motor_direction = 0;
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Stepper motor direction set to forward.\r\n");
+        }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *MOTOR:FWD\r\n");
+        }
+    }
+
+    // 处理 "*MOTOR:REV" 命令 (设置步进电机反转)
+    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*MOTOR:REV"))
+    {
+        if (num_parsed_tokens == current_param_idx)
+        {
+            motor_direction = 1;
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Stepper motor direction set to reverse.\r\n");
+        }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *MOTOR:REV\r\n");
+        }
+    }
+
+    // 处理 "*GET:MOTOR" 命令 (获取步进电机状态)
+    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*GET:MOTOR"))
+    {
+        if (num_parsed_tokens == current_param_idx)
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Stepper Motor Status:\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"  State: ");
+            UARTStringPutNOBlocking(UART0_BASE, motor_running ? (uint8_t *)"RUNNING" : (uint8_t *)"STOPPED");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"  Direction: ");
+            UARTStringPutNOBlocking(UART0_BASE, motor_direction ? (uint8_t *)"REVERSE" : (uint8_t *)"FORWARD");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"  Speed: 1 RPM\r\n");
+        }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *GET:MOTOR\r\n");
+        }
+    }
+
     // 处理 "INIT" 命令 (复位)
     else if (compareTokens(&parsed_tokens[0], "INIT", 4))
     {
@@ -2264,7 +2365,12 @@ static void ProcessUartCommand(void)
                                                            "*GET :TIME SECOND                          : Get second.\r\n"
                                                            "*GET :ALARM                                : Get alarm time.\r\n"
                                                            "*GET :DISPLAY                              : Get 7-segment display status.\r\n"
-                                                           "*GET :FORMAT                               : Get display flow format.\r\n");
+                                                           "*GET :FORMAT                               : Get display flow format.\r\n"
+                                                           "*MOTOR :START                              : Start stepper motor (1 RPM).\r\n"
+                                                           "*MOTOR :STOP                               : Stop stepper motor.\r\n"
+                                                           "*MOTOR :FWD                                : Set stepper motor forward.\r\n"
+                                                           "*MOTOR :REV                                : Set stepper motor reverse.\r\n"
+                                                           "*GET :MOTOR                                : Get stepper motor status.\r\n");
         }
         else // 命令格式错误
         {
@@ -2331,6 +2437,8 @@ void DevicesInit(void)
     PWMInit();         // 初始化PWM
     S800_I2C0_Init();  // 初始化I2C0
     HibernateInit();   // 初始化休眠模块
+    StepperGPIOInit(); // 初始化步进电机GPIO
+    StepperTimerInit();// 初始化步进电机Timer
     IntMasterEnable(); // 开启总中断
 }
 
@@ -2703,6 +2811,60 @@ void Delay(uint32_t value)
     uint32_t ui32Loop;
     for (ui32Loop = 0; ui32Loop < value; ui32Loop++)
         ;
+}
+
+// 初始化步进电机GPIO (PF0-PF3)
+void StepperGPIOInit(void)
+{
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF))
+        ;
+
+    HWREG(GPIO_PORTF_BASE + GPIO_O_LOCK) = GPIO_LOCK_KEY;
+    HWREG(GPIO_PORTF_BASE + GPIO_O_CR) |= GPIO_PIN_0;
+
+    GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, STEPPER_PINS);
+}
+
+// 初始化步进电机Timer0
+void StepperTimerInit(void)
+{
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_TIMER0))
+        ;
+
+    TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
+    TimerLoadSet(TIMER0_BASE, TIMER_A, STEPPER_TIMER_LOAD);
+    TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
+    IntEnable(INT_TIMER0A);
+    TimerEnable(TIMER0_BASE, TIMER_A);
+}
+
+// Timer0A中断处理 — 步进电机驱动
+void TIMER0A_Handler(void)
+{
+    uint8_t output = 0;
+    TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
+
+    if (!motor_running)
+        return;
+
+    output = stepper_sequence[motor_position & 0x07];
+    GPIOPinWrite(GPIO_PORTF_BASE, STEPPER_PINS, output);
+
+    if (motor_direction == 0)
+    {
+        motor_position++;
+        if (motor_position >= STEPPER_BEATS_PER_REVOLUTION)
+            motor_position = 0;
+    }
+    else
+    {
+        if (motor_position == 0)
+            motor_position = STEPPER_BEATS_PER_REVOLUTION - 1;
+        else
+            motor_position--;
+    }
 }
 
 // 初始化I2C0模块和I/O扩展器

@@ -3094,65 +3094,58 @@ void SysTick_Handler(void)
     }
 
     // 按钮状态检测和去抖
-    current_button_raw_value = I2C0_ReadByte(TCA6424_I2CADDR, TCA6424_INPUT_PORT0); // 读取按钮原始值
+    current_button_raw_value = I2C0_ReadByte(TCA6424_I2CADDR, TCA6424_INPUT_PORT0);
     for (i = 0; i < 8; ++i)
     {
-        // 如果当前按钮被按下 (TCA6424为低电平有效)
-        if (!((current_button_raw_value >> i) & 0x01))
+        if (!((current_button_raw_value >> i) & 0x01)) // 读到按下 (低电平有效)
         {
-            if (key_debounce_timer[i] < DEBOUNCE_TIME_MS) // 去抖计时
-            {
+            if (key_debounce_timer[i] < DEBOUNCE_TIME_MS)
                 key_debounce_timer[i]++;
-            }
-            else // 去抖完成
-            {
-                if (key_states[i] == false) // 如果按钮从释放变为按下
-                {
-                    key_states[i] = true;                    // 更新按钮状态
-                    key_press_start_time[i] = g_system_tick; // 记录按下起始时间
-                    key_long_press_timer[i] = 0;             // 重置长按定时器
-                    key_long_press_start_event[i] = false;   // 清除长按开始事件
-                    key_repeat_press_event[i] = false;       // 清除重复按事件
-                }
-                else // 按钮持续按下
-                {
-                    key_long_press_timer[i]++; // 长按计时
 
-                    // 检测长按开始事件
+            if (key_debounce_timer[i] == DEBOUNCE_TIME_MS) // 去抖完成，确认按下
+            {
+                if (key_states[i] == false) // 从释放转为按下
+                {
+                    key_states[i] = true;
+                    key_press_start_time[i] = g_system_tick;
+                    key_long_press_timer[i] = 0;
+                    key_long_press_start_event[i] = false;
+                    key_repeat_press_event[i] = false;
+                }
+                else // 持续按下
+                {
+                    key_long_press_timer[i]++;
+
                     if (key_long_press_start_event[i] == false && key_long_press_timer[i] >= LONG_PRESS_TIME_MS)
                     {
-                        key_long_press_start_event[i] = true; // 触发长按开始事件
-
-                        if (i == 2) // K3 ADD长按立即进入重复递增
-                        {
+                        key_long_press_start_event[i] = true;
+                        if (i == 2)
                             key_long_press_timer[i] = 0;
-                        }
                     }
-                    // 检测重复按事件 (仅针对K3 ADD)
                     else if (i == 2 && key_long_press_start_event[i] == true && key_long_press_timer[i] >= REPEAT_PRESS_TIME_MS)
                     {
-                        key_repeat_press_event[i] = true; // 触发重复按事件
-                        key_long_press_timer[i] = 0;      // 重置定时器以实现连续重复
+                        key_repeat_press_event[i] = true;
+                        key_long_press_timer[i] = 0;
                     }
                 }
-                any_button_is_currently_pressed_debounced = true; // 标记有去抖后的按钮被按下
+                any_button_is_currently_pressed_debounced = true;
             }
         }
-        else // 按钮未被按下 (释放状态)
+        else // 读到释放 (高电平)
         {
-            key_debounce_timer[i] = 0; // 重置去抖定时器
-            if (key_states[i] == true) // 如果按钮从按下变为释放
+            if (key_debounce_timer[i] > 0)
+                key_debounce_timer[i]--;
+
+            if (key_debounce_timer[i] == 0 && key_states[i] == true) // 去抖完成，确认释放
             {
-                key_states[i] = false; // 更新按钮状态
+                key_states[i] = false;
 
-                press_duration = g_system_tick - key_press_start_time[i]; // 计算按下持续时间
+                press_duration = g_system_tick - key_press_start_time[i];
 
-                // 检测短按事件 (在长按阈值之前释放)
                 if (key_long_press_start_event[i] == false && press_duration >= DEBOUNCE_TIME_MS && press_duration < LONG_PRESS_TIME_MS)
                 {
-                    key_short_press_event[i] = true; // 触发短按事件
+                    key_short_press_event[i] = true;
                 }
-                // 处理K1在长按保存过程中的释放
                 else if (i == 0 && long_press_saving_in_progress)
                 {
                     current_mode = MODE_FLOWING;
@@ -3162,12 +3155,12 @@ void SysTick_Handler(void)
                     long_press_saving_in_progress = false;
                     seven_segment_display_on = true;
                 }
+
+                key_long_press_start_event[i] = false;
+                key_repeat_press_event[i] = false;
+                key_long_press_timer[i] = 0;
+                key_press_start_time[i] = 0;
             }
-            // 清除所有长按和重复按相关的标志
-            key_long_press_start_event[i] = false;
-            key_repeat_press_event[i] = false;
-            key_long_press_timer[i] = 0;
-            key_press_start_time[i] = 0;
         }
     }
 

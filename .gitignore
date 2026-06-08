@@ -10,8 +10,7 @@
 ## MDK-ARM
 #.MDK-ARM
 DebugConfig
-#*uvguix*
-
+*uvguix*
 *.o
 *.d
 *.hex
@@ -31,7 +30,7 @@ DebugConfig
 *.__i
 *.i
 *.user
-
+EventRecorderStub.scvd
 #CLAUDE
 CLAUDE.md
 requirements.txt

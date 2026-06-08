@@ -175,6 +175,8 @@ bool shifting = true;                // 是否正在移位
 bool display_reversed_order = false; // 显示是否反向
 
 bool seven_segment_display_on = true; // 7段数码管是否开启
+bool alarm_ringing = false;           // 闹钟是否正在响铃
+bool alarm_silenced_for_match = false; // 当前闹钟匹配秒是否已被手动静音
 
 volatile uint8_t raw_key_value = 0xFF;       // 按钮原始值
 volatile uint8_t prev_raw_key_value = 0xFF;  // 上一个按钮原始值
@@ -185,6 +187,11 @@ volatile bool key_states[8];                 // 按钮当前状态
 volatile bool key_short_press_event[8];      // 按钮短按事件标志
 volatile bool key_long_press_start_event[8]; // 按钮长按开始事件标志
 volatile bool key_repeat_press_event[8];     // 按钮重复按事件标志
+
+volatile uint32_t user_key_debounce_timer[2];   // USER1/USER2去抖定时器
+volatile uint32_t user_key_press_start_time[2]; // USER1/USER2按下起始时间
+volatile bool user_key_states[2];               // USER1/USER2当前状态
+volatile bool user_key_short_press_event[2];    // USER1/USER2短按事件
 
 typedef enum // 系统模式枚举
 {
@@ -209,8 +216,17 @@ typedef enum // 设置字段枚举
     FIELD_ALARM_SECOND  // 闹钟秒字段
 } setting_field_t;
 
+typedef enum // 正常显示内容枚举
+{
+    MAIN_DISPLAY_FLOW,
+    MAIN_DISPLAY_TIME,
+    MAIN_DISPLAY_DATE,
+    MAIN_DISPLAY_YEAR
+} main_display_t;
+
 system_mode_t current_mode = MODE_FLOWING;          // 当前系统模式
 setting_field_t current_setting_field = FIELD_NONE; // 当前设置字段
+main_display_t main_display_mode = MAIN_DISPLAY_FLOW; // 正常模式显示内容
 bool is_blinking = false;                           // 闪烁标志
 bool prev_shifting = true;                          // 之前的移位状态
 bool prev_shift_mode = false;                       // 之前的移位方向模式
@@ -240,6 +256,7 @@ void UARTInit(void);                                                            
 void UARTStringPutNOBlocking(uint32_t ui32Base, uint8_t *cMessage);                                                                                   // 非阻塞方式发送字符串
 static void UARTStringPutReversedNOBlocking(uint32_t ui32Base, uint8_t *cMessage);                                                                    // 非阻塞方式反向发送字符串
 void UARTCharPutBlocking(uint32_t ui32Base, uint8_t ucData);                                                                                          // 阻塞方式发送单个字符
+void UserKeyGPIOInit(void);                                                                                                                           // 初始化USER1/USER2 GPIO
 void StepperGPIOInit(void);                                                                                                                            // 初始化步进电机GPIO
 void StepperTimerInit(void);                                                                                                                          // 初始化步进电机Timer
 void PWMInit(void);                                                                                                                                   // 初始化PWM
@@ -256,6 +273,12 @@ static void ProcessButtonEvents(void);                                          
 static void HandleButtonShortPress(uint8_t button_num);                                                                                               // 处理短按按钮事件
 static void HandleButtonLongPress(uint8_t button_num);                                                                                                // 处理长按按钮事件
 static void HandleButtonIncrement(bool is_long_press_repeat);                                                                                         // 处理参数递增逻辑
+static void StopAlarmRinging(bool silence_current_match);                                                                                             // 停止当前响铃
+static void EnterNextEditMode(void);                                                                                                                   // FUNC短按循环编辑模式
+static void CycleSettingField(void);                                                                                                                   // SHIFT切换编辑字段
+static void SaveCurrentSettingsAndExit(void);                                                                                                          // SAVE/FUNC长按保存并退出
+static void SwitchMainDisplay(void);                                                                                                                   // DISP切换正常显示内容
+static void ToggleDisplayFormat(void);                                                                                                                 // FORMAT切换显示方向
 static void Update7SegmentDisplay(void);                                                                                                              // 更新7段数码管显示
 static void UpdateDisplayShift(void);                                                                                                                 // 更新显示移位效果
 static void UpdateTimeAndDisplayBuffers(void);                                                                                                        // 更新时间、日期和显示缓冲区
@@ -295,6 +318,13 @@ int main(void)
         key_short_press_event[i] = false;
         key_long_press_start_event[i] = false;
         key_repeat_press_event[i] = false;
+    }
+    for (i = 0; i < 2; ++i)
+    {
+        user_key_debounce_timer[i] = 0;
+        user_key_press_start_time[i] = 0;
+        user_key_states[i] = false;
+        user_key_short_press_event[i] = false;
     }
 
     while (true) // 主循环
@@ -351,7 +381,15 @@ static void HandleAlarm(void)
 {
     if (hh == alm_hh && mm == alm_mm && ss == alm_ss && alm_hh != 25)
     {
-        PWMStart(500); // 启动PWM作为闹钟提示音
+        if (!alarm_ringing && !alarm_silenced_for_match)
+        {
+            PWMStart(500); // 启动PWM作为闹钟提示音
+            alarm_ringing = true;
+        }
+    }
+    else
+    {
+        alarm_silenced_for_match = false;
     }
 }
 
@@ -505,25 +543,345 @@ static void ProcessButtonEvents(void)
         if (key_long_press_start_event[i]) // 如果有长按开始事件
         {
             HandleButtonLongPress((uint8_t)(i + 1)); // 处理长按
-            key_long_press_start_event[i] = false;   // 清除标志
+            if (i != 2)                              // K3 ADD需要保持长按状态以产生重复按
+            {
+                key_long_press_start_event[i] = false; // 清除标志
+            }
         }
         if (key_repeat_press_event[i]) // 如果有重复按事件
         {
-            if (i == 5) // 按钮6 (i=5)是递增按钮
+            if (i == 2) // K3 ADD是递增按钮
             {
                 HandleButtonIncrement(true); // 处理重复递增
             }
             key_repeat_press_event[i] = false; // 清除标志
         }
     }
+
+    // if (user_key_short_press_event[0])
+    // {
+    //     UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:KEY USER1\r\n");
+    //     user_key_short_press_event[0] = false;
+    // }
+    // if (user_key_short_press_event[1])
+    // {
+    //     UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:KEY USER2\r\n");
+    //     user_key_short_press_event[1] = false;
+    // }
+}
+
+static void StopAlarmRinging(bool silence_current_match)
+{
+    PWMStop();
+    alarm_ringing = false;
+    if (silence_current_match)
+    {
+        alarm_silenced_for_match = true;
+    }
+}
+
+static void EnterNextEditMode(void)
+{
+    system_mode_t old_mode = current_mode;
+
+    if (old_mode == MODE_FLOWING || old_mode == MODE_ALARM_DISPLAY)
+    {
+        original_year = year;
+        original_month = month;
+        original_day = day;
+        original_hh = hh;
+        original_mm = mm;
+        original_ss = ss;
+        original_alm_hh = alm_hh;
+        original_alm_mm = alm_mm;
+        original_alm_ss = alm_ss;
+        unsaved_changes_active = false;
+
+        current_mode = MODE_DATE_SET;
+        temp_year = year;
+        temp_month = month;
+        temp_day = day;
+        prev_shifting = shifting;
+        prev_shift_mode = shift_mode;
+        prev_shift_speed = shift_speed;
+        shifting = false;
+        current_setting_field = FIELD_YEAR;
+        is_blinking = true;
+        blink_timer = 0;
+        seven_segment_display_on = true;
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"FUNC: Date edit mode.\r\n");
+    }
+    else if (old_mode == MODE_DATE_SET)
+    {
+        current_mode = MODE_TIME_SET;
+        temp_hh = hh;
+        temp_mm = mm;
+        temp_ss = ss;
+        current_setting_field = FIELD_HOUR;
+        is_blinking = true;
+        blink_timer = 0;
+        seven_segment_display_on = true;
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"FUNC: Time edit mode.\r\n");
+    }
+    else if (old_mode == MODE_TIME_SET)
+    {
+        current_mode = MODE_ALARM_SET;
+        temp_alm_hh = (alm_hh == 25) ? 0 : (uint8_t)alm_hh;
+        temp_alm_mm = (uint8_t)alm_mm;
+        temp_alm_ss = (uint8_t)alm_ss;
+        current_setting_field = FIELD_ALARM_HOUR;
+        is_blinking = true;
+        blink_timer = 0;
+        seven_segment_display_on = true;
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"FUNC: Alarm edit mode.\r\n");
+    }
+    else if (old_mode == MODE_ALARM_SET)
+    {
+        current_mode = MODE_FLOWING;
+        current_setting_field = FIELD_NONE;
+        is_blinking = false;
+        shifting = prev_shifting;
+        shift_mode = prev_shift_mode;
+        shift_speed = prev_shift_speed;
+        seven_segment_display_on = true;
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"FUNC: Exit edit mode.\r\n");
+    }
+}
+
+static void CycleSettingField(void)
+{
+    if (current_mode == MODE_DATE_SET)
+    {
+        if (current_setting_field == FIELD_YEAR)
+            current_setting_field = FIELD_MONTH;
+        else if (current_setting_field == FIELD_MONTH)
+            current_setting_field = FIELD_DAY;
+        else
+            current_setting_field = FIELD_YEAR;
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SHIFT: Date field.\r\n");
+    }
+    else if (current_mode == MODE_TIME_SET)
+    {
+        if (current_setting_field == FIELD_HOUR)
+            current_setting_field = FIELD_MINUTE;
+        else if (current_setting_field == FIELD_MINUTE)
+            current_setting_field = FIELD_SECOND;
+        else
+            current_setting_field = FIELD_HOUR;
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SHIFT: Time field.\r\n");
+    }
+    else if (current_mode == MODE_ALARM_SET)
+    {
+        if (current_setting_field == FIELD_ALARM_HOUR)
+            current_setting_field = FIELD_ALARM_MINUTE;
+        else if (current_setting_field == FIELD_ALARM_MINUTE)
+            current_setting_field = FIELD_ALARM_SECOND;
+        else
+            current_setting_field = FIELD_ALARM_HOUR;
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SHIFT: Alarm field.\r\n");
+    }
+    else
+    {
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SHIFT is only valid in edit mode.\r\n");
+        return;
+    }
+
+    is_blinking = true;
+    blink_timer = 0;
+    seven_segment_display_on = true;
+}
+
+static void SaveCurrentSettingsAndExit(void)
+{
+    bool restore_flow_state = (current_mode != MODE_FLOWING);
+
+    if (current_mode == MODE_DATE_SET)
+    {
+        if (is_valid_date(temp_year, temp_month, temp_day))
+        {
+            year = temp_year;
+            month = temp_month;
+            day = temp_day;
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SAVE: Date saved.\r\n");
+        }
+        else
+        {
+            year = original_year;
+            month = original_month;
+            day = original_day;
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SAVE: Invalid date, reverted.\r\n");
+        }
+    }
+    else if (current_mode == MODE_TIME_SET)
+    {
+        if (is_valid_time(temp_hh, temp_mm, temp_ss))
+        {
+            hh = temp_hh;
+            mm = temp_mm;
+            ss = temp_ss;
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SAVE: Time saved.\r\n");
+        }
+        else
+        {
+            hh = original_hh;
+            mm = original_mm;
+            ss = original_ss;
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SAVE: Invalid time, reverted.\r\n");
+        }
+    }
+    else if (current_mode == MODE_ALARM_SET)
+    {
+        if (is_valid_time(temp_alm_hh, temp_alm_mm, temp_alm_ss))
+        {
+            alm_hh = temp_alm_hh;
+            alm_mm = temp_alm_mm;
+            alm_ss = temp_alm_ss;
+            StopAlarmRinging(false);
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SAVE: Alarm saved.\r\n");
+        }
+        else
+        {
+            alm_hh = original_alm_hh;
+            alm_mm = original_alm_mm;
+            alm_ss = original_alm_ss;
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SAVE: Invalid alarm, reverted.\r\n");
+        }
+    }
+    else
+    {
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SAVE: Current settings saved.\r\n");
+    }
+
+    original_year = year;
+    original_month = month;
+    original_day = day;
+    original_hh = hh;
+    original_mm = mm;
+    original_ss = ss;
+    original_alm_hh = alm_hh;
+    original_alm_mm = alm_mm;
+    original_alm_ss = alm_ss;
+
+    current_mode = MODE_FLOWING;
+    current_setting_field = FIELD_NONE;
+    is_blinking = false;
+    if (restore_flow_state)
+    {
+        shifting = prev_shifting;
+        shift_mode = prev_shift_mode;
+        shift_speed = prev_shift_speed;
+    }
+    unsaved_changes_active = false;
+    long_press_saving_in_progress = false;
+    save_blink_active = true;
+    save_blink_timer = g_system_tick;
+    seven_segment_display_on = true;
+}
+
+static void SwitchMainDisplay(void)
+{
+    if (current_mode != MODE_FLOWING)
+    {
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"DISP is only valid in normal mode.\r\n");
+        return;
+    }
+
+    if (main_display_mode == MAIN_DISPLAY_FLOW)
+    {
+        main_display_mode = MAIN_DISPLAY_TIME;
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"DISP: HH.MM.SS.\r\n");
+    }
+    else if (main_display_mode == MAIN_DISPLAY_TIME)
+    {
+        main_display_mode = MAIN_DISPLAY_DATE;
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"DISP: YY.MM.DD.\r\n");
+    }
+    else if (main_display_mode == MAIN_DISPLAY_DATE)
+    {
+        main_display_mode = MAIN_DISPLAY_YEAR;
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"DISP: YYYY.MMDD.\r\n");
+    }
+    else
+    {
+        main_display_mode = MAIN_DISPLAY_FLOW;
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"DISP: Flow.\r\n");
+    }
+}
+
+static void ToggleDisplayFormat(void)
+{
+    if (current_mode != MODE_FLOWING)
+    {
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"FORMAT is only valid in normal mode.\r\n");
+        return;
+    }
+
+    shift_mode = !shift_mode;
+    display_reversed_order = shift_mode;
+    UARTStringPutNOBlocking(UART0_BASE, display_reversed_order ? (uint8_t *)"FORMAT: RIGHT.\r\n" : (uint8_t *)"FORMAT: LEFT.\r\n");
 }
 
 // 根据按钮编号处理短按功能
 static void HandleButtonShortPress(uint8_t button_num)
 {
-    system_mode_t old_mode; // 保存旧模式
-
     mode_timeout_timer = g_system_tick; // 重置模式超时定时器
+
+    switch (button_num)
+    {
+    case 1: // K1 FUNC: 响铃时停止；否则循环 date -> time -> alarm -> exit
+        if (alarm_ringing)
+        {
+            StopAlarmRinging(true);
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"FUNC: Alarm stopped.\r\n");
+        }
+        else
+        {
+            EnterNextEditMode();
+        }
+        return;
+    case 2: // K2 SHIFT
+        CycleSettingField();
+        return;
+    case 3: // K3 ADD
+        if (is_blinking)
+        {
+            HandleButtonIncrement(false);
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ADD: Field incremented.\r\n");
+        }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ADD requires an active edit field.\r\n");
+        }
+        return;
+    case 4: // K4 SAVE
+        SaveCurrentSettingsAndExit();
+        return;
+    case 5: // K5 DISP
+        SwitchMainDisplay();
+        return;
+    case 6: // K6 SPEED
+        if (current_mode == MODE_FLOWING)
+        {
+            shift_speed = !shift_speed;
+            UARTStringPutNOBlocking(UART0_BASE, shift_speed ? (uint8_t *)"SPEED: Fast.\r\n" : (uint8_t *)"SPEED: Slow.\r\n");
+        }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SPEED is only valid in normal mode.\r\n");
+        }
+        return;
+    case 7: // K7 FORMAT
+        ToggleDisplayFormat();
+        return;
+    case 8: // K8 EXT
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:KEY EXT\r\n");
+        return;
+    default:
+        return;
+    }
+}
+
+#if 0
 
     switch (button_num)
     {
@@ -847,10 +1205,21 @@ static void HandleButtonShortPress(uint8_t button_num)
     }
 }
 
+#endif
+
 // 根据按钮编号处理长按功能
 static void HandleButtonLongPress(uint8_t button_num)
 {
     mode_timeout_timer = g_system_tick; // 重置模式超时定时器
+
+    if (button_num == 1) // K1 FUNC长按: 保存并退出
+    {
+        SaveCurrentSettingsAndExit();
+    }
+    return;
+}
+
+#if 0
 
     switch (button_num)
     {
@@ -947,11 +1316,14 @@ static void HandleButtonLongPress(uint8_t button_num)
     }
 }
 
+#endif
+
 // 处理参数递增逻辑
 static void HandleButtonIncrement(bool is_long_press_repeat)
 {
     uint8_t current_days_in_month;
 
+    (void)is_long_press_repeat;
     mode_timeout_timer = g_system_tick; // 重置模式超时定时器
 
     if (long_press_saving_in_progress) // 如果正在保存，则不能递增
@@ -1042,9 +1414,8 @@ static void Update7SegmentDisplay(void)
     uint8_t segment_data;                // 当前数码管段码
     bool digit_should_blink_off = false; // 数字是否应该闪烁关闭
     uint8_t local_cnt;                   // 本地数码管计数
-    uint8_t displayed_char_idx;          // 显示字符在主缓冲区中的索引
+    uint8_t display_cnt;                 // 考虑FORMAT后的显示位置
     uint8_t effective_segment_data;      // 实际发送的段码
-    uint8_t prev_original_char_idx;      // 前一个字符的原始索引
 
     if (!seven_segment_display_on) // 如果7段数码管关闭
     {
@@ -1061,15 +1432,65 @@ static void Update7SegmentDisplay(void)
 
     if (current_mode == MODE_FLOWING) // 流动显示模式
     {
-        if (display_reversed_order) // 反向显示
+        display_cnt = display_reversed_order ? (uint8_t)(7 - local_cnt) : local_cnt;
+
+        if (main_display_mode == MAIN_DISPLAY_FLOW)
         {
-            displayed_char_idx = (uint8_t)((shift + (7 - local_cnt)) % 18);
+            segment_data = master_display_buffer[(shift + local_cnt) % 18];
         }
-        else // 正常显示
+        else if (main_display_mode == MAIN_DISPLAY_TIME)
         {
-            displayed_char_idx = (uint8_t)((shift + local_cnt) % 18);
+            if (display_cnt == 0 || display_cnt == 7)
+                segment_data = 0x00;
+            else if (display_cnt == 1)
+                segment_data = seg7[hh / 10];
+            else if (display_cnt == 2)
+                segment_data = seg7[hh % 10] | 0x80;
+            else if (display_cnt == 3)
+                segment_data = seg7[mm / 10];
+            else if (display_cnt == 4)
+                segment_data = seg7[mm % 10] | 0x80;
+            else if (display_cnt == 5)
+                segment_data = seg7[ss / 10];
+            else
+                segment_data = seg7[ss % 10];
         }
-        segment_data = master_display_buffer[displayed_char_idx]; // 从主显示缓冲区获取数据
+        else if (main_display_mode == MAIN_DISPLAY_DATE)
+        {
+            if (display_cnt == 0 || display_cnt == 7)
+                segment_data = 0x00;
+            else if (display_cnt == 1)
+                segment_data = seg7[(year / 10) % 10];
+            else if (display_cnt == 2)
+                segment_data = seg7[year % 10] | 0x80;
+            else if (display_cnt == 3)
+                segment_data = seg7[month / 10];
+            else if (display_cnt == 4)
+                segment_data = seg7[month % 10] | 0x80;
+            else if (display_cnt == 5)
+                segment_data = seg7[day / 10];
+            else
+                segment_data = seg7[day % 10];
+        }
+        else if (main_display_mode == MAIN_DISPLAY_YEAR)
+        {
+            if (display_cnt == 0)
+                segment_data = seg7[(year / 1000) % 10];
+            else if (display_cnt == 1)
+                segment_data = seg7[(year / 100) % 10];
+            else if (display_cnt == 2)
+                segment_data = seg7[(year / 10) % 10];
+            else if (display_cnt == 3)
+                segment_data = seg7[year % 10] | 0x80;
+            else if (display_cnt == 4)
+                segment_data = seg7[month / 10];
+            else if (display_cnt == 5)
+                segment_data = seg7[month % 10] | 0x80;
+            else if (display_cnt == 6)
+                segment_data = seg7[day / 10];
+            else
+                segment_data = seg7[day % 10];
+        }
     }
     else if (current_mode == MODE_DATE_SET) // 日期设置模式
     {
@@ -1199,21 +1620,10 @@ static void Update7SegmentDisplay(void)
     }
     else
     {
-        // 默认情况下，显示主显示缓冲区的内容
-        segment_data = master_display_buffer[(local_cnt + shift) % 18];
+        segment_data = 0x00;
     }
 
     effective_segment_data = segment_data;
-
-    if (current_mode == MODE_FLOWING && display_reversed_order) // 反向流动模式下处理小数点显示
-    {
-        effective_segment_data &= ~0x80;                                 // 清除当前位的小数点
-        prev_original_char_idx = (displayed_char_idx - 1 + 18) % 18;     // 获取前一个字符的原始索引
-        if ((master_display_buffer[prev_original_char_idx] & 0x80) != 0) // 如果前一个字符有小数点
-        {
-            effective_segment_data |= 0x80; // 则当前位显示小数点
-        }
-    }
 
     // 处理保存成功后的闪烁效果
     if (save_blink_active && (g_system_tick - save_blink_timer) % (BLINK_ON_TIME_MS + BLINK_OFF_TIME_MS) >= BLINK_ON_TIME_MS)
@@ -2437,9 +2847,20 @@ void DevicesInit(void)
     PWMInit();         // 初始化PWM
     S800_I2C0_Init();  // 初始化I2C0
     HibernateInit();   // 初始化休眠模块
+    // UserKeyGPIOInit(); // 初始化USER1/USER2按键
     StepperGPIOInit(); // 初始化步进电机GPIO
     StepperTimerInit();// 初始化步进电机Timer
     IntMasterEnable(); // 开启总中断
+}
+
+void UserKeyGPIOInit(void)
+{
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOJ);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOJ))
+        ;
+
+    GPIOPinTypeGPIOInput(GPIO_PORTJ_BASE, GPIO_PIN_0 | GPIO_PIN_1);
+    GPIOPadConfigSet(GPIO_PORTJ_BASE, GPIO_PIN_0 | GPIO_PIN_1, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
 }
 
 // 处理模式超时，恢复到原始显示状态并放弃未保存的更改
@@ -2598,6 +3019,8 @@ void SysTick_Handler(void)
 {
     int i = 0;
     uint8_t current_button_raw_value;
+    // uint8_t current_user_raw_value;
+    // uint8_t current_user_pin;
     uint8_t max_days_for_current_month;
     bool any_button_is_currently_pressed_debounced = false; // 任何按钮是否处于去抖后的按下状态
     uint32_t press_duration;                                // 按钮按下持续时间
@@ -2700,13 +3123,13 @@ void SysTick_Handler(void)
                     {
                         key_long_press_start_event[i] = true; // 触发长按开始事件
 
-                        if (i == 5) // 如果是按钮6 (递增按钮)，立即重置长按定时器以实现重复按
+                        if (i == 2) // K3 ADD长按立即进入重复递增
                         {
                             key_long_press_timer[i] = 0;
                         }
                     }
-                    // 检测重复按事件 (仅针对按钮6)
-                    else if (i == 5 && key_long_press_start_event[i] == true && key_long_press_timer[i] >= REPEAT_PRESS_TIME_MS)
+                    // 检测重复按事件 (仅针对K3 ADD)
+                    else if (i == 2 && key_long_press_start_event[i] == true && key_long_press_timer[i] >= REPEAT_PRESS_TIME_MS)
                     {
                         key_repeat_press_event[i] = true; // 触发重复按事件
                         key_long_press_timer[i] = 0;      // 重置定时器以实现连续重复
@@ -2729,8 +3152,8 @@ void SysTick_Handler(void)
                 {
                     key_short_press_event[i] = true; // 触发短按事件
                 }
-                // 处理按钮8在长按保存过程中的释放
-                else if (i == 7 && long_press_saving_in_progress)
+                // 处理K1在长按保存过程中的释放
+                else if (i == 0 && long_press_saving_in_progress)
                 {
                     current_mode = MODE_FLOWING;
                     shifting = prev_shifting;
@@ -2803,6 +3226,7 @@ void PWMStart(uint32_t ui32Freq_Hz)
 void PWMStop(void)
 {
     PWMGenDisable(PWM0_BASE, PWM_GEN_3); // 禁用PWM发生器3
+    alarm_ringing = false;
 }
 
 // 简单的软件延时

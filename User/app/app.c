@@ -15,31 +15,31 @@ void App_Init(void)
 {
     int i;
 
-    memset(time_transmit_buffer, 0, sizeof(time_transmit_buffer));
-    memset(alarm_transmit_buffer, 0, sizeof(alarm_transmit_buffer));
-    memset(date_transmit_buffer, 0, sizeof(date_transmit_buffer));
+    memset(g.disp.time_buf, 0, sizeof(g.disp.time_buf));
+    memset(g.disp.alarm_buf, 0, sizeof(g.disp.alarm_buf));
+    memset(g.disp.date_buf, 0, sizeof(g.disp.date_buf));
 
     UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Initialization successful! Type HELP for commands.\r\n");
 
     UpdateTimeAndDisplayBuffers();
-    shift = 0;
+    g.disp.shift = 0;
 
     for (i = 0; i < 8; ++i)
     {
-        key_debounce_timer[i] = 0;
-        key_press_start_time[i] = 0;
-        key_long_press_timer[i] = 0;
-        key_states[i] = false;
-        key_short_press_event[i] = false;
-        key_long_press_start_event[i] = false;
-        key_repeat_press_event[i] = false;
+        g.in.debounce[i] = 0;
+        g.in.press_start[i] = 0;
+        g.in.long_press[i] = 0;
+        g.in.state[i] = false;
+        g.in.short_evt[i] = false;
+        g.in.long_start_evt[i] = false;
+        g.in.repeat_evt[i] = false;
     }
     for (i = 0; i < 2; ++i)
     {
-        user_key_debounce_timer[i] = 0;
-        user_key_press_start_time[i] = 0;
-        user_key_states[i] = false;
-        user_key_short_press_event[i] = false;
+        g.in.user_debounce[i] = 0;
+        g.in.user_press_start[i] = 0;
+        g.in.user_state[i] = false;
+        g.in.user_short_evt[i] = false;
     }
 }
 
@@ -47,7 +47,7 @@ void App_RunOnce(void)
 {
     HandleAlarm();
 
-    if (init_flag)
+    if (g.disp.init_flag)
     {
         RunInitializationSequence();
     }
@@ -55,36 +55,36 @@ void App_RunOnce(void)
     {
         ProcessButtonEvents();
 
-        if (mode_timeout_flag)
+        if (g.timer.mode_timeout_flag)
         {
             HandleModeTimeout();
-            mode_timeout_flag = false;
+            g.timer.mode_timeout_flag = false;
         }
 
-        if (clock1s_flag)
+        if (g.timer.flag_1s)
         {
             UpdateTimeAndDisplayBuffers();
-            clock1s_flag = false;
+            g.timer.flag_1s = false;
         }
 
-        if (clock2ms_flag)
+        if (g.timer.flag_2ms)
         {
             Update7SegmentDisplay();
-            clock2ms_flag = false;
+            g.timer.flag_2ms = false;
         }
 
-        if (message_active ||
-            (current_mode == MODE_FLOWING && shifting == true && seven_segment_display_on == true))
+        if (g.disp.msg_active ||
+            (g.disp.mode == MODE_FLOWING && g.disp.shifting == true && g.disp.on == true))
         {
-            if (shift_speed == false && clock500ms_flag)
+            if (g.disp.shift_speed == false && g.timer.flag_500ms)
             {
                 UpdateDisplayShift();
-                clock500ms_flag = false;
+                g.timer.flag_500ms = false;
             }
-            else if (shift_speed == true && clock300ms_flag)
+            else if (g.disp.shift_speed == true && g.timer.flag_300ms)
             {
                 UpdateDisplayShift();
-                clock300ms_flag = false;
+                g.timer.flag_300ms = false;
             }
         }
         Display_UpdateStatusLeds();

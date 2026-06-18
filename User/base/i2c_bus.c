@@ -38,17 +38,17 @@ void S800_I2C0_Init(void)
     GPIOPinTypeI2CSCL(GPIO_PORTB_BASE, GPIO_PIN_2); // 设置PB2为I2C SCL引脚类型
     GPIOPinTypeI2C(GPIO_PORTB_BASE, GPIO_PIN_3);    // 设置PB3为I2C SDA引脚类型
 
-    I2CMasterInitExpClk(I2C0_BASE, ui32SysClock, true); // 初始化I2C0为主机，使用快速模式
+    I2CMasterInitExpClk(I2C0_BASE, g.sys_clock_hz, true); // 初始化I2C0为主机，使用快速模式
     I2CMasterEnable(I2C0_BASE);                         // 使能I2C0
 
     // 配置TCA6424 I/O扩展器
-    result = I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_CONFIG_PORT0, 0x0ff); // PORT0配置为输入
-    result = I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_CONFIG_PORT1, 0x0);   // PORT1配置为输出
-    result = I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_CONFIG_PORT2, 0x0);   // PORT2配置为输出
+    g.disp.i2c_result = I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_CONFIG_PORT0, 0x0ff); // PORT0配置为输入
+    g.disp.i2c_result = I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_CONFIG_PORT1, 0x0);   // PORT1配置为输出
+    g.disp.i2c_result = I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_CONFIG_PORT2, 0x0);   // PORT2配置为输出
 
     // 配置PCA9557 I/O扩展器
-    result = I2C0_WriteByte(PCA9557_I2CADDR, PCA9557_CONFIG, 0x00);  // 配置为输出
-    result = I2C0_WriteByte(PCA9557_I2CADDR, PCA9557_OUTPUT, 0x0ff); // 设置所有输出为高电平
+    g.disp.i2c_result = I2C0_WriteByte(PCA9557_I2CADDR, PCA9557_CONFIG, 0x00);  // 配置为输出
+    g.disp.i2c_result = I2C0_WriteByte(PCA9557_I2CADDR, PCA9557_OUTPUT, 0x0ff); // 设置所有输出为高电平
 }
 
 // 通过I2C向指定设备地址的寄存器写入一个字节

@@ -25,7 +25,7 @@
 // 初始化SysTick定时器，用于生成系统滴答
 void SysTickInit(void)
 {
-    SysTickPeriodSet(ui32SysClock / SYSTICK_FREQUENCY); // 设置SysTick周期
+    SysTickPeriodSet(g.sys_clock_hz / SYSTICK_FREQUENCY); // 设置SysTick周期
     SysTickEnable();                                    // 启动SysTick
     SysTickIntEnable();                                 // 使能SysTick中断
 }
@@ -34,26 +34,26 @@ void SysTickInit(void)
 
 void SysTickUpdateTimebaseFlags(void)
 {
-    g_system_tick++;
+    g.timer.tick++;
 
-    if (g_system_tick % V_T2ms == 0)
+    if (g.timer.tick % V_T2ms == 0)
     {
-        clock2ms_flag = true;
+        g.timer.flag_2ms = true;
     }
-    if (g_system_tick % V_T500ms == 0)
+    if (g.timer.tick % V_T500ms == 0)
     {
-        clock500ms_flag = true;
+        g.timer.flag_500ms = true;
     }
-    if (g_system_tick % V_T300ms == 0)
+    if (g.timer.tick % V_T300ms == 0)
     {
-        clock300ms_flag = true;
+        g.timer.flag_300ms = true;
     }
-    if (g_system_tick % V_T900ms == 0)
+    if (g.timer.tick % V_T900ms == 0)
     {
-        clock900ms_flag = true;
+        g.timer.flag_900ms = true;
     }
-    if (g_system_tick % V_T1s == 0)
+    if (g.timer.tick % V_T1s == 0)
     {
-        clock1s_flag = true;
+        g.timer.flag_1s = true;
     }
 }

@@ -32,7 +32,7 @@
 void DevicesInit(void)
 {
     // 设置系统时钟频率为20MHz
-    ui32SysClock = SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ | SYSCTL_OSC_MAIN |
+    g.sys_clock_hz = SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ | SYSCTL_OSC_MAIN |
                                        SYSCTL_USE_PLL | SYSCTL_CFG_VCO_480),
                                       20000000);
 
@@ -55,7 +55,7 @@ void UserKeyGPIOInit(void)
 
     GPIOPinTypeGPIOInput(GPIO_PORTJ_BASE, GPIO_PIN_0 | GPIO_PIN_1);
     GPIOPadConfigSet(GPIO_PORTJ_BASE, GPIO_PIN_0 | GPIO_PIN_1, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
-    user_key_gpio_ready = true;
+    g.in.user_gpio_ready = true;
 }
 
 // 处理模式超时，恢复到原始显示状态并放弃未保存的更改

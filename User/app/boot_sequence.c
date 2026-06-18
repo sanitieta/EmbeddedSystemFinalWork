@@ -38,15 +38,15 @@ static void RestoreRtcOrDefaultTime(void)
     uint8_t max_days_for_current_month;
     uint32_t past_sec;
 
-    currentRTC = HibernateRTCGet();
-    HibernateDataGet(fetchRTC, 4);
+    g.rtc.current = HibernateRTCGet();
+    HibernateDataGet(g.rtc.fetched, 4);
 
-    if (fetchRTC[3] != 0 && currentRTC >= fetchRTC[3])
+    if (g.rtc.fetched[3] != 0 && g.rtc.current >= g.rtc.fetched[3])
     {
-        past_sec = currentRTC - fetchRTC[3];
-        hh = (int8_t)fetchRTC[0];
-        mm = (int8_t)fetchRTC[1];
-        ss = (int8_t)fetchRTC[2];
+        past_sec = g.rtc.current - g.rtc.fetched[3];
+        g.clock.hh = (int8_t)g.rtc.fetched[0];
+        g.clock.mm = (int8_t)g.rtc.fetched[1];
+        g.clock.ss = (int8_t)g.rtc.fetched[2];
 
         while (past_sec > 0)
         {
@@ -56,57 +56,57 @@ static void RestoreRtcOrDefaultTime(void)
     }
     else
     {
-        hh = 0;
-        mm = 0;
-        ss = 0;
-        year = 2025;
-        month = 6;
-        day = 3;
-        alm_hh = 25;
-        alm_mm = 0;
-        alm_ss = 0;
+        g.clock.hh = 0;
+        g.clock.mm = 0;
+        g.clock.ss = 0;
+        g.clock.year = 2025;
+        g.clock.month = 6;
+        g.clock.day = 3;
+        g.clock.alm_hh = 25;
+        g.clock.alm_mm = 0;
+        g.clock.alm_ss = 0;
     }
 
-    max_days_for_current_month = days_in_month[month];
-    if (month == 2 && is_leap_year(year))
+    max_days_for_current_month = g.rtc.days_in_month[g.clock.month];
+    if (g.clock.month == 2 && is_leap_year(g.clock.year))
         max_days_for_current_month = 29;
-    if (!is_valid_date(year, month, day) || day > max_days_for_current_month)
+    if (!is_valid_date(g.clock.year, g.clock.month, g.clock.day) || g.clock.day > max_days_for_current_month)
     {
-        year = 2025;
-        month = 6;
-        day = 3;
+        g.clock.year = 2025;
+        g.clock.month = 6;
+        g.clock.day = 3;
     }
 }
 
 static void FinishBootSequence(void)
 {
-    init_flag = false;
-    shift = 0;
-    rightshift = 0x01;
-    cnt = 0;
-    init_procedure = 0;
+    g.disp.init_flag = false;
+    g.disp.shift = 0;
+    g.disp.rightshift = 0x01;
+    g.disp.cnt = 0;
+    g.disp.init_step = 0;
 
-    original_year = year;
-    original_month = month;
-    original_day = day;
-    original_hh = hh;
-    original_mm = mm;
-    original_ss = ss;
-    original_alm_hh = alm_hh;
-    original_alm_mm = alm_mm;
-    original_alm_ss = alm_ss;
-    unsaved_changes_active = false;
-    seven_segment_display_on = true;
-    shifting = true;
-    main_display_mode = MAIN_DISPLAY_TIME;
+    g.clock.original_year = g.clock.year;
+    g.clock.original_month = g.clock.month;
+    g.clock.original_day = g.clock.day;
+    g.clock.original_hh = g.clock.hh;
+    g.clock.original_mm = g.clock.mm;
+    g.clock.original_ss = g.clock.ss;
+    g.clock.original_alm_hh = g.clock.alm_hh;
+    g.clock.original_alm_mm = g.clock.alm_mm;
+    g.clock.original_alm_ss = g.clock.alm_ss;
+    g.clock.unsaved_changes_active = false;
+    g.disp.on = true;
+    g.disp.shifting = true;
+    g.disp.main_disp = MAIN_DISPLAY_TIME;
     UpdateTimeAndDisplayBuffers();
 }
 
 static void OutputBootFrame(const uint8_t frame[8], uint8_t led_pattern)
 {
-    result = I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT2, 0x00);
-    result = I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT1, frame[cnt]);
-    result = I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT2, rightshift);
+    g.disp.i2c_result = I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT2, 0x00);
+    g.disp.i2c_result = I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT1, frame[g.disp.cnt]);
+    g.disp.i2c_result = I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT2, g.disp.rightshift);
     Display_SetLedOutput(led_pattern);
 }
 
@@ -122,11 +122,11 @@ void RunInitializationSequence(void)
         rtc_restored = true;
     }
 
-    if (clock2ms_flag == true)
+    if (g.timer.flag_2ms == true)
     {
-        clock2ms_flag = false;
+        g.timer.flag_2ms = false;
 
-        switch (init_procedure)
+        switch (g.disp.init_step)
         {
         case 0:
             OutputBootFrame(all_on_frame, 0xFF);
@@ -151,18 +151,18 @@ void RunInitializationSequence(void)
             break;
         }
 
-        cnt++;
-        rightshift = (uint8_t)(rightshift << 1);
-        if (cnt >= 0x8)
+        g.disp.cnt++;
+        g.disp.rightshift = (uint8_t)(g.disp.rightshift << 1);
+        if (g.disp.cnt >= 0x8)
         {
-            rightshift = 0x01;
-            cnt = 0;
+            g.disp.rightshift = 0x01;
+            g.disp.cnt = 0;
         }
     }
 
-    if (clock900ms_flag == true)
+    if (g.timer.flag_900ms == true)
     {
-        clock900ms_flag = false;
-        init_procedure++;
+        g.timer.flag_900ms = false;
+        g.disp.init_step++;
     }
 }

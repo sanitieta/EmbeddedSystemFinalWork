@@ -50,7 +50,7 @@ void PWMStart(uint32_t ui32Freq_Hz)
     PWMGenDisable(PWM0_BASE, PWM_GEN_3); // 先禁用PWM发生器
 
     // 设置PWM周期，决定频率
-    PWMGenPeriodSet(PWM0_BASE, PWM_GEN_3, ui32SysClock / ui32Freq_Hz);
+    PWMGenPeriodSet(PWM0_BASE, PWM_GEN_3, g.sys_clock_hz / ui32Freq_Hz);
     // 设置PWM脉冲宽度为周期的一半 (50%占空比)
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_7, (PWMGenPeriodGet(PWM0_BASE, PWM_GEN_3) / 2));
 
@@ -63,7 +63,7 @@ void PWMStart(uint32_t ui32Freq_Hz)
 void PWMStop(void)
 {
     PWMGenDisable(PWM0_BASE, PWM_GEN_3); // 禁用PWM发生器3
-    alarm_ringing = false;
+    g.disp.alarm_ringing = false;
 }
 
 // 简单的软件延时

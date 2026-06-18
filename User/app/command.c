@@ -84,21 +84,21 @@ static void PutProtocolBuffer(const uint8_t *buffer, uint8_t len)
 
 static void ResetProtocolState(void)
 {
-    seven_segment_display_on = true;
-    shift_mode = false;
-    display_reversed_order = false;
-    night_mode_active = false;
-    led_takeover_active = false;
-    led_takeover_pattern = 0x00;
-    message_active = false;
-    message_scroll_active = false;
-    message_len = 0;
-    message_shift = 0;
-    shifting = true;
-    current_mode = MODE_FLOWING;
-    current_setting_field = FIELD_NONE;
-    is_blinking = false;
-    main_display_mode = MAIN_DISPLAY_TIME;
+    g.disp.on = true;
+    g.disp.shift_mode = false;
+    g.disp.reversed = false;
+    g.disp.night_mode = false;
+    g.disp.led_takeover = false;
+    g.disp.led_pattern = 0x00;
+    g.disp.msg_active = false;
+    g.disp.msg_scroll = false;
+    g.disp.msg_len = 0;
+    g.disp.msg_shift = 0;
+    g.disp.shifting = true;
+    g.disp.mode = MODE_FLOWING;
+    g.disp.field = FIELD_NONE;
+    g.disp.blinking = false;
+    g.disp.main_disp = MAIN_DISPLAY_TIME;
     StopAlarmRinging(false);
     UpdateTimeAndDisplayBuffers();
     Display_UpdateStatusLeds();
@@ -110,9 +110,9 @@ static uint8_t FindRawPayloadOffset(uint8_t token_idx)
     uint8_t current_token = 0;
     bool in_token = false;
 
-    for (i = 0; i < uart_receive_len; ++i)
+    for (i = 0; i < g.uart.rx_len; ++i)
     {
-        if (uart_receive_buffer[i] != ' ')
+        if (g.uart.rx_buf[i] != ' ')
         {
             if (!in_token)
             {
@@ -127,7 +127,7 @@ static uint8_t FindRawPayloadOffset(uint8_t token_idx)
             in_token = false;
         }
     }
-    return uart_receive_len;
+    return g.uart.rx_len;
 }
 
 // 比较命令Token与字符串，支持最小匹配长度
@@ -300,27 +300,27 @@ static void ParseUartInput(void)
     uint8_t current_token_len = 0;
     bool in_token = false; // 是否在Token中
 
-    num_parsed_tokens = 0; // 重置Token数量
+    g.uart.num_tokens = 0; // 重置Token数量
 
     // 清空之前解析的Token
     for (i = 0; i < MAX_COMMAND_TOKENS; ++i)
     {
-        parsed_tokens[i].token_len = 0;
-        memset(parsed_tokens[i].token_str, 0, MAX_TOKEN_LENGTH);
+        g.uart.tokens[i].token_len = 0;
+        memset(g.uart.tokens[i].token_str, 0, MAX_TOKEN_LENGTH);
     }
 
     i = 0;
 
     // 跳过开头的空格
-    while (i < uart_receive_len && uart_receive_buffer[i] == ' ')
+    while (i < g.uart.rx_len && g.uart.rx_buf[i] == ' ')
     {
         i++;
     }
 
     // 遍历接收缓冲区，解析Token
-    while (i < uart_receive_len && num_parsed_tokens < MAX_COMMAND_TOKENS)
+    while (i < g.uart.rx_len && g.uart.num_tokens < MAX_COMMAND_TOKENS)
     {
-        if (uart_receive_buffer[i] != ' ') // 如果当前字符不是空格
+        if (g.uart.rx_buf[i] != ' ') // 如果当前字符不是空格
         {
             if (!in_token) // 如果不在Token中，开始一个新Token
             {
@@ -330,7 +330,7 @@ static void ParseUartInput(void)
             if (current_token_len < MAX_TOKEN_LENGTH - 1) // 检查Token长度是否超出限制
             {
                 // 将字符添加到当前Token
-                parsed_tokens[num_parsed_tokens].token_str[current_token_len] = uart_receive_buffer[i];
+                g.uart.tokens[g.uart.num_tokens].token_str[current_token_len] = g.uart.rx_buf[i];
                 current_token_len++;
             }
         }
@@ -338,13 +338,13 @@ static void ParseUartInput(void)
         {
             if (in_token) // 如果在Token中，则当前Token结束
             {
-                parsed_tokens[num_parsed_tokens].token_len = current_token_len;
-                parsed_tokens[num_parsed_tokens].token_str[current_token_len] = '\0'; // 字符串结束符
-                num_parsed_tokens++;                                                  // 增加Token数量
+                g.uart.tokens[g.uart.num_tokens].token_len = current_token_len;
+                g.uart.tokens[g.uart.num_tokens].token_str[current_token_len] = '\0'; // 字符串结束符
+                g.uart.num_tokens++;                                                  // 增加Token数量
                 in_token = false;                                                     // 退出Token状态
             }
             // 跳过连续的空格
-            while (i + 1 < uart_receive_len && uart_receive_buffer[i + 1] == ' ')
+            while (i + 1 < g.uart.rx_len && g.uart.rx_buf[i + 1] == ' ')
             {
                 i++;
             }
@@ -353,11 +353,11 @@ static void ParseUartInput(void)
     }
 
     // 处理最后一个Token (如果字符串不是以空格结束)
-    if (in_token && num_parsed_tokens < MAX_COMMAND_TOKENS)
+    if (in_token && g.uart.num_tokens < MAX_COMMAND_TOKENS)
     {
-        parsed_tokens[num_parsed_tokens].token_len = current_token_len;
-        parsed_tokens[num_parsed_tokens].token_str[current_token_len] = '\0';
-        num_parsed_tokens++;
+        g.uart.tokens[g.uart.num_tokens].token_len = current_token_len;
+        g.uart.tokens[g.uart.num_tokens].token_str[current_token_len] = '\0';
+        g.uart.num_tokens++;
     }
 }
 
@@ -374,16 +374,16 @@ void ProcessUartCommand(void)
     uint8_t val_token_idx;     // 值Token的起始索引
     bool found_arg;            // 是否找到有效参数
 
-    if (cmd_state == 0) // 如果没有新命令
+    if (g.uart.cmd_state == 0) // 如果没有新命令
     {
         return;
     }
 
-    cmd_state = 0;    // 清除命令状态
+    g.uart.cmd_state = 0;    // 清除命令状态
     ParseUartInput(); // 解析UART输入
 
     // 确定参数的起始索引，处理形如 "*CMD:SUB_CMD" 的命令
-    if (num_parsed_tokens >= 2 && parsed_tokens[0].token_str[0] == '*' && parsed_tokens[1].token_len > 0 && parsed_tokens[1].token_str[0] == ':')
+    if (g.uart.num_tokens >= 2 && g.uart.tokens[0].token_str[0] == '*' && g.uart.tokens[1].token_len > 0 && g.uart.tokens[1].token_str[0] == ':')
     {
         current_param_idx = 2; // 参数从第三个Token开始
     }
@@ -393,9 +393,9 @@ void ProcessUartCommand(void)
     }
 
     // 处理 "*RST" 命令 (复位)
-    if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*RST"))
+    if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*RST"))
     {
-        if (num_parsed_tokens == current_param_idx) // 确保没有额外参数
+        if (g.uart.num_tokens == current_param_idx) // 确保没有额外参数
         {
             ResetProtocolState();
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:RST\r\n");
@@ -407,96 +407,96 @@ void ProcessUartCommand(void)
     }
 
     // 处理 "*SET:DATE" 命令 (设置日期)
-    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*SET:DATE"))
+    else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*SET:DATE"))
     {
         parse_ok = false;
         field_token_idx = current_param_idx; // 字段Token的起始索引
 
         // 匹配 "YEAR MONTH DATE YYYY MM DD" 格式
-        if (num_parsed_tokens == field_token_idx + 6 &&
-            compareFieldKeyword(&parsed_tokens[field_token_idx], "YEAR", 4) &&
-            compareFieldKeyword(&parsed_tokens[field_token_idx + 1], "MONTH", 5) &&
-            compareFieldKeyword(&parsed_tokens[field_token_idx + 2], "DATE", 3))
+        if (g.uart.num_tokens == field_token_idx + 6 &&
+            compareFieldKeyword(&g.uart.tokens[field_token_idx], "YEAR", 4) &&
+            compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "MONTH", 5) &&
+            compareFieldKeyword(&g.uart.tokens[field_token_idx + 2], "DATE", 3))
         {
             val_token_idx = field_token_idx + 3;                                                        // 值Token的起始索引
-            parsed_val[0] = atoi((char *)parsed_tokens[val_token_idx].token_str);                       // 年
-            parsed_val[1] = atoi((char *)parsed_tokens[val_token_idx + 1].token_str);                   // 月
-            parsed_val[2] = atoi((char *)parsed_tokens[val_token_idx + 2].token_str);                   // 日
+            parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);                       // 年
+            parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str);                   // 月
+            parsed_val[2] = atoi((char *)g.uart.tokens[val_token_idx + 2].token_str);                   // 日
             if (is_valid_date((uint16_t)parsed_val[0], (uint8_t)parsed_val[1], (uint8_t)parsed_val[2])) // 检查日期有效性
             {
-                year = (uint16_t)parsed_val[0];
-                month = (uint8_t)parsed_val[1];
-                day = (uint8_t)parsed_val[2];
+                g.clock.year = (uint16_t)parsed_val[0];
+                g.clock.month = (uint8_t)parsed_val[1];
+                g.clock.day = (uint8_t)parsed_val[2];
                 parse_ok = true;
             }
         }
 
         // 匹配 "YEAR MONTH YYYY MM" 格式
-        else if (num_parsed_tokens == field_token_idx + 4 &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx], "YEAR", 4) &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx + 1], "MONTH", 5))
+        else if (g.uart.num_tokens == field_token_idx + 4 &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "YEAR", 4) &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "MONTH", 5))
         {
             val_token_idx = field_token_idx + 2;
-            parsed_val[0] = atoi((char *)parsed_tokens[val_token_idx].token_str);     // 年
-            parsed_val[1] = atoi((char *)parsed_tokens[val_token_idx + 1].token_str); // 月
+            parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 年
+            parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 月
             if (parsed_val[0] >= 2000 && parsed_val[0] <= 2099 && parsed_val[1] >= 1 && parsed_val[1] <= 12)
             {
-                year = (uint16_t)parsed_val[0];
-                month = (uint8_t)parsed_val[1];
-                if (!is_valid_date(year, month, day)) // 如果新年月导致日期无效，调整日期
+                g.clock.year = (uint16_t)parsed_val[0];
+                g.clock.month = (uint8_t)parsed_val[1];
+                if (!is_valid_date(g.clock.year, g.clock.month, g.clock.day)) // 如果新年月导致日期无效，调整日期
                 {
-                    day = (uint8_t)(is_leap_year(year) && month == 2 ? 29 : days_in_month[month]);
+                    g.clock.day = (uint8_t)(is_leap_year(g.clock.year) && g.clock.month == 2 ? 29 : g.rtc.days_in_month[g.clock.month]);
                 }
                 parse_ok = true;
             }
         }
 
         // 匹配 "YEAR DATE YYYY DD" 格式
-        else if (num_parsed_tokens == field_token_idx + 4 &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx], "YEAR", 4) &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx + 1], "DATE", 3))
+        else if (g.uart.num_tokens == field_token_idx + 4 &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "YEAR", 4) &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "DATE", 3))
         {
             val_token_idx = field_token_idx + 2;
-            parsed_val[0] = atoi((char *)parsed_tokens[val_token_idx].token_str);     // 年
-            parsed_val[1] = atoi((char *)parsed_tokens[val_token_idx + 1].token_str); // 日
-            if (is_valid_date((uint16_t)parsed_val[0], month, (uint8_t)parsed_val[1]))
+            parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 年
+            parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 日
+            if (is_valid_date((uint16_t)parsed_val[0], g.clock.month, (uint8_t)parsed_val[1]))
             {
-                year = (uint16_t)parsed_val[0];
-                day = (uint8_t)parsed_val[1];
+                g.clock.year = (uint16_t)parsed_val[0];
+                g.clock.day = (uint8_t)parsed_val[1];
                 parse_ok = true;
             }
         }
 
         // 匹配 "MONTH DATE MM DD" 格式
-        else if (num_parsed_tokens == field_token_idx + 4 &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx], "MONTH", 5) &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx + 1], "DATE", 3))
+        else if (g.uart.num_tokens == field_token_idx + 4 &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "MONTH", 5) &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "DATE", 3))
         {
             val_token_idx = field_token_idx + 2;
-            parsed_val[0] = atoi((char *)parsed_tokens[val_token_idx].token_str);     // 月
-            parsed_val[1] = atoi((char *)parsed_tokens[val_token_idx + 1].token_str); // 日
-            if (is_valid_date(year, (uint8_t)parsed_val[0], (uint8_t)parsed_val[1]))
+            parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 月
+            parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 日
+            if (is_valid_date(g.clock.year, (uint8_t)parsed_val[0], (uint8_t)parsed_val[1]))
             {
-                month = (uint8_t)parsed_val[0];
-                day = (uint8_t)parsed_val[1];
+                g.clock.month = (uint8_t)parsed_val[0];
+                g.clock.day = (uint8_t)parsed_val[1];
                 parse_ok = true;
             }
         }
 
         // 匹配 "YEAR YYYY" 格式
-        else if (num_parsed_tokens == field_token_idx + 2 &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx], "YEAR", 4))
+        else if (g.uart.num_tokens == field_token_idx + 2 &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "YEAR", 4))
         {
             val_token_idx = field_token_idx + 1;
-            parsed_val[0] = atoi((char *)parsed_tokens[val_token_idx].token_str); // 年
+            parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 年
             if (parsed_val[0] >= 2000 && parsed_val[0] <= 2099)
             {
-                year = (uint16_t)parsed_val[0];
-                if (!is_valid_date(year, month, day)) // 如果新年份导致日期无效，调整日期
+                g.clock.year = (uint16_t)parsed_val[0];
+                if (!is_valid_date(g.clock.year, g.clock.month, g.clock.day)) // 如果新年份导致日期无效，调整日期
                 {
-                    if (month == 2)
+                    if (g.clock.month == 2)
                     {
-                        day = (uint8_t)(is_leap_year(year) ? 29 : 28);
+                        g.clock.day = (uint8_t)(is_leap_year(g.clock.year) ? 29 : 28);
                     }
                 }
                 parse_ok = true;
@@ -504,20 +504,20 @@ void ProcessUartCommand(void)
         }
 
         // 匹配 "MONTH MM" 格式
-        else if (num_parsed_tokens == field_token_idx + 2 &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx], "MONTH", 5))
+        else if (g.uart.num_tokens == field_token_idx + 2 &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "MONTH", 5))
         {
             val_token_idx = field_token_idx + 1;
-            parsed_val[0] = atoi((char *)parsed_tokens[val_token_idx].token_str); // 月
+            parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 月
             if (parsed_val[0] >= 1 && parsed_val[0] <= 12)
             {
-                month = (uint8_t)parsed_val[0];
-                if (!is_valid_date(year, month, day)) // 如果新月份导致日期无效，调整日期
+                g.clock.month = (uint8_t)parsed_val[0];
+                if (!is_valid_date(g.clock.year, g.clock.month, g.clock.day)) // 如果新月份导致日期无效，调整日期
                 {
-                    day = days_in_month[month];
-                    if (month == 2 && is_leap_year(year))
+                    g.clock.day = g.rtc.days_in_month[g.clock.month];
+                    if (g.clock.month == 2 && is_leap_year(g.clock.year))
                     {
-                        day = 29;
+                        g.clock.day = 29;
                     }
                 }
                 parse_ok = true;
@@ -525,24 +525,24 @@ void ProcessUartCommand(void)
         }
 
         // 匹配 "DATE DD" 格式
-        else if (num_parsed_tokens == field_token_idx + 2 &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx], "DATE", 3))
+        else if (g.uart.num_tokens == field_token_idx + 2 &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "DATE", 3))
         {
             val_token_idx = field_token_idx + 1;
-            parsed_val[0] = atoi((char *)parsed_tokens[val_token_idx].token_str); // 日
-            if (is_valid_date(year, month, (uint8_t)parsed_val[0]))
+            parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 日
+            if (is_valid_date(g.clock.year, g.clock.month, (uint8_t)parsed_val[0]))
             {
-                day = (uint8_t)parsed_val[0];
+                g.clock.day = (uint8_t)parsed_val[0];
                 parse_ok = true;
             }
         }
 
         if (parse_ok) // 如果解析成功，保存原始值并发送成功消息
         {
-            original_year = year;
-            original_month = month;
-            original_day = day;
-            unsaved_changes_active = false;
+            g.clock.original_year = g.clock.year;
+            g.clock.original_month = g.clock.month;
+            g.clock.original_day = g.clock.day;
+            g.clock.unsaved_changes_active = false;
             UpdateTimeAndDisplayBuffers();
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Date set successfully.\r\n");
         }
@@ -553,123 +553,123 @@ void ProcessUartCommand(void)
     }
 
     // 处理 "*SET:TIME" 命令 (设置时间)
-    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*SET:TIME"))
+    else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*SET:TIME"))
     {
         parse_ok = false;
         field_token_idx = current_param_idx;
 
         // 匹配 "HOUR MINUTE SECOND HH MM SS" 格式
-        if (num_parsed_tokens == field_token_idx + 6 &&
-            compareFieldKeyword(&parsed_tokens[field_token_idx], "HOUR", 4) &&
-            compareFieldKeyword(&parsed_tokens[field_token_idx + 1], "MINUTE", 3) &&
-            compareFieldKeyword(&parsed_tokens[field_token_idx + 2], "SECOND", 3))
+        if (g.uart.num_tokens == field_token_idx + 6 &&
+            compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 4) &&
+            compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "MINUTE", 3) &&
+            compareFieldKeyword(&g.uart.tokens[field_token_idx + 2], "SECOND", 3))
         {
             val_token_idx = field_token_idx + 3;
-            parsed_val[0] = atoi((char *)parsed_tokens[val_token_idx].token_str);     // 时
-            parsed_val[1] = atoi((char *)parsed_tokens[val_token_idx + 1].token_str); // 分
-            parsed_val[2] = atoi((char *)parsed_tokens[val_token_idx + 2].token_str); // 秒
+            parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 时
+            parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 分
+            parsed_val[2] = atoi((char *)g.uart.tokens[val_token_idx + 2].token_str); // 秒
             if (is_valid_time((uint8_t)parsed_val[0], (uint8_t)parsed_val[1], (uint8_t)parsed_val[2]))
             {
-                hh = (int8_t)parsed_val[0];
-                mm = (int8_t)parsed_val[1];
-                ss = (int8_t)parsed_val[2];
+                g.clock.hh = (int8_t)parsed_val[0];
+                g.clock.mm = (int8_t)parsed_val[1];
+                g.clock.ss = (int8_t)parsed_val[2];
                 parse_ok = true;
             }
         }
 
         // 匹配 "HOUR MINUTE HH MM" 格式
-        else if (num_parsed_tokens == field_token_idx + 4 &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx], "HOUR", 4) &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx + 1], "MINUTE", 3))
+        else if (g.uart.num_tokens == field_token_idx + 4 &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 4) &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "MINUTE", 3))
         {
             val_token_idx = field_token_idx + 2;
-            parsed_val[0] = atoi((char *)parsed_tokens[val_token_idx].token_str);     // 时
-            parsed_val[1] = atoi((char *)parsed_tokens[val_token_idx + 1].token_str); // 分
-            if (is_valid_time((uint8_t)parsed_val[0], (uint8_t)parsed_val[1], ss))
+            parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 时
+            parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 分
+            if (is_valid_time((uint8_t)parsed_val[0], (uint8_t)parsed_val[1], g.clock.ss))
             {
-                hh = (int8_t)parsed_val[0];
-                mm = (int8_t)parsed_val[1];
+                g.clock.hh = (int8_t)parsed_val[0];
+                g.clock.mm = (int8_t)parsed_val[1];
                 parse_ok = true;
             }
         }
 
         // 匹配 "HOUR SECOND HH SS" 格式
-        else if (num_parsed_tokens == field_token_idx + 4 &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx], "HOUR", 4) &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx + 1], "SECOND", 3))
+        else if (g.uart.num_tokens == field_token_idx + 4 &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 4) &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "SECOND", 3))
         {
             val_token_idx = field_token_idx + 2;
-            parsed_val[0] = atoi((char *)parsed_tokens[val_token_idx].token_str);     // 时
-            parsed_val[1] = atoi((char *)parsed_tokens[val_token_idx + 1].token_str); // 秒
-            if (is_valid_time((uint8_t)parsed_val[0], mm, (uint8_t)parsed_val[1]))
+            parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 时
+            parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 秒
+            if (is_valid_time((uint8_t)parsed_val[0], g.clock.mm, (uint8_t)parsed_val[1]))
             {
-                hh = (int8_t)parsed_val[0];
-                ss = (int8_t)parsed_val[1];
+                g.clock.hh = (int8_t)parsed_val[0];
+                g.clock.ss = (int8_t)parsed_val[1];
                 parse_ok = true;
             }
         }
 
         // 匹配 "MINUTE SECOND MM SS" 格式
-        else if (num_parsed_tokens == field_token_idx + 4 &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx], "MINUTE", 3) &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx + 1], "SECOND", 3))
+        else if (g.uart.num_tokens == field_token_idx + 4 &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "MINUTE", 3) &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "SECOND", 3))
         {
             val_token_idx = field_token_idx + 2;
-            parsed_val[0] = atoi((char *)parsed_tokens[val_token_idx].token_str);     // 分
-            parsed_val[1] = atoi((char *)parsed_tokens[val_token_idx + 1].token_str); // 秒
-            if (is_valid_time(hh, (uint8_t)parsed_val[0], (uint8_t)parsed_val[1]))
+            parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 分
+            parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 秒
+            if (is_valid_time(g.clock.hh, (uint8_t)parsed_val[0], (uint8_t)parsed_val[1]))
             {
-                mm = (int8_t)parsed_val[0];
-                ss = (int8_t)parsed_val[1];
+                g.clock.mm = (int8_t)parsed_val[0];
+                g.clock.ss = (int8_t)parsed_val[1];
                 parse_ok = true;
             }
         }
 
         // 匹配 "HOUR HH" 格式
-        else if (num_parsed_tokens == field_token_idx + 2 &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx], "HOUR", 4))
+        else if (g.uart.num_tokens == field_token_idx + 2 &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 4))
         {
             val_token_idx = field_token_idx + 1;
-            parsed_val[0] = atoi((char *)parsed_tokens[val_token_idx].token_str); // 时
+            parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 时
             if (parsed_val[0] >= 0 && parsed_val[0] < 24)
             {
-                hh = (int8_t)parsed_val[0];
+                g.clock.hh = (int8_t)parsed_val[0];
                 parse_ok = true;
             }
         }
 
         // 匹配 "MINUTE MM" 格式
-        else if (num_parsed_tokens == field_token_idx + 2 &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx], "MINUTE", 3))
+        else if (g.uart.num_tokens == field_token_idx + 2 &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "MINUTE", 3))
         {
             val_token_idx = field_token_idx + 1;
-            parsed_val[0] = atoi((char *)parsed_tokens[val_token_idx].token_str); // 分
+            parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 分
             if (parsed_val[0] >= 0 && parsed_val[0] < 60)
             {
-                mm = (int8_t)parsed_val[0];
+                g.clock.mm = (int8_t)parsed_val[0];
                 parse_ok = true;
             }
         }
 
         // 匹配 "SECOND SS" 格式
-        else if (num_parsed_tokens == field_token_idx + 2 &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx], "SECOND", 3))
+        else if (g.uart.num_tokens == field_token_idx + 2 &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "SECOND", 3))
         {
             val_token_idx = field_token_idx + 1;
-            parsed_val[0] = atoi((char *)parsed_tokens[val_token_idx].token_str); // 秒
+            parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 秒
             if (parsed_val[0] >= 0 && parsed_val[0] < 60)
             {
-                ss = (int8_t)parsed_val[0];
+                g.clock.ss = (int8_t)parsed_val[0];
                 parse_ok = true;
             }
         }
 
         if (parse_ok) // 如果解析成功，保存原始值并发送成功消息
         {
-            original_hh = hh;
-            original_mm = mm;
-            original_ss = ss;
-            unsaved_changes_active = false;
+            g.clock.original_hh = g.clock.hh;
+            g.clock.original_mm = g.clock.mm;
+            g.clock.original_ss = g.clock.ss;
+            g.clock.unsaved_changes_active = false;
             UpdateTimeAndDisplayBuffers();
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Time set successfully.\r\n");
         }
@@ -680,113 +680,113 @@ void ProcessUartCommand(void)
     }
 
     // 处理 "*SET:ALARM" 命令 (设置闹钟)
-    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*SET:ALARM"))
+    else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*SET:ALARM"))
     {
         parse_ok = false;
         field_token_idx = current_param_idx;
 
         // 匹配 "HOUR MINUTE SECOND HH MM SS" 格式
-        if (num_parsed_tokens == field_token_idx + 6 &&
-            compareFieldKeyword(&parsed_tokens[field_token_idx], "HOUR", 4) &&
-            compareFieldKeyword(&parsed_tokens[field_token_idx + 1], "MINUTE", 3) &&
-            compareFieldKeyword(&parsed_tokens[field_token_idx + 2], "SECOND", 3))
+        if (g.uart.num_tokens == field_token_idx + 6 &&
+            compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 4) &&
+            compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "MINUTE", 3) &&
+            compareFieldKeyword(&g.uart.tokens[field_token_idx + 2], "SECOND", 3))
         {
             val_token_idx = field_token_idx + 3;
-            parsed_val[0] = atoi((char *)parsed_tokens[val_token_idx].token_str);     // 时
-            parsed_val[1] = atoi((char *)parsed_tokens[val_token_idx + 1].token_str); // 分
-            parsed_val[2] = atoi((char *)parsed_tokens[val_token_idx + 2].token_str); // 秒
+            parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 时
+            parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 分
+            parsed_val[2] = atoi((char *)g.uart.tokens[val_token_idx + 2].token_str); // 秒
             if (is_valid_time((uint8_t)parsed_val[0], (uint8_t)parsed_val[1], (uint8_t)parsed_val[2]))
             {
-                alm_hh = (int8_t)parsed_val[0];
-                alm_mm = (int8_t)parsed_val[1];
-                alm_ss = (int8_t)parsed_val[2];
+                g.clock.alm_hh = (int8_t)parsed_val[0];
+                g.clock.alm_mm = (int8_t)parsed_val[1];
+                g.clock.alm_ss = (int8_t)parsed_val[2];
                 parse_ok = true;
             }
         }
 
         // 匹配 "HOUR MINUTE HH MM" 格式
-        else if (num_parsed_tokens == field_token_idx + 4 &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx], "HOUR", 4) &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx + 1], "MINUTE", 3))
+        else if (g.uart.num_tokens == field_token_idx + 4 &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 4) &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "MINUTE", 3))
         {
             val_token_idx = field_token_idx + 2;
-            parsed_val[0] = atoi((char *)parsed_tokens[val_token_idx].token_str);     // 时
-            parsed_val[1] = atoi((char *)parsed_tokens[val_token_idx + 1].token_str); // 分
-            if (is_valid_time((uint8_t)parsed_val[0], (uint8_t)parsed_val[1], alm_ss))
+            parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 时
+            parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 分
+            if (is_valid_time((uint8_t)parsed_val[0], (uint8_t)parsed_val[1], g.clock.alm_ss))
             {
-                alm_hh = (int8_t)parsed_val[0];
-                alm_mm = (int8_t)parsed_val[1];
+                g.clock.alm_hh = (int8_t)parsed_val[0];
+                g.clock.alm_mm = (int8_t)parsed_val[1];
                 parse_ok = true;
             }
         }
 
         // 匹配 "HOUR SECOND HH SS" 格式
-        else if (num_parsed_tokens == field_token_idx + 4 &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx], "HOUR", 4) &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx + 1], "SECOND", 3))
+        else if (g.uart.num_tokens == field_token_idx + 4 &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 4) &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "SECOND", 3))
         {
             val_token_idx = field_token_idx + 2;
-            parsed_val[0] = atoi((char *)parsed_tokens[val_token_idx].token_str);     // 时
-            parsed_val[1] = atoi((char *)parsed_tokens[val_token_idx + 1].token_str); // 秒
-            if (is_valid_time((uint8_t)parsed_val[0], alm_mm, (uint8_t)parsed_val[1]))
+            parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 时
+            parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 秒
+            if (is_valid_time((uint8_t)parsed_val[0], g.clock.alm_mm, (uint8_t)parsed_val[1]))
             {
-                alm_hh = (int8_t)parsed_val[0];
-                alm_ss = (int8_t)parsed_val[1];
+                g.clock.alm_hh = (int8_t)parsed_val[0];
+                g.clock.alm_ss = (int8_t)parsed_val[1];
                 parse_ok = true;
             }
         }
 
         // 匹配 "MINUTE SECOND MM SS" 格式
-        else if (num_parsed_tokens == field_token_idx + 4 &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx], "MINUTE", 3) &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx + 1], "SECOND", 3))
+        else if (g.uart.num_tokens == field_token_idx + 4 &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "MINUTE", 3) &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "SECOND", 3))
         {
             val_token_idx = field_token_idx + 2;
-            parsed_val[0] = atoi((char *)parsed_tokens[val_token_idx].token_str);     // 分
-            parsed_val[1] = atoi((char *)parsed_tokens[val_token_idx + 1].token_str); // 秒
-            if (is_valid_time(alm_hh, (uint8_t)parsed_val[0], (uint8_t)parsed_val[1]))
+            parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 分
+            parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 秒
+            if (is_valid_time(g.clock.alm_hh, (uint8_t)parsed_val[0], (uint8_t)parsed_val[1]))
             {
-                alm_mm = (int8_t)parsed_val[0];
-                alm_ss = (int8_t)parsed_val[1];
+                g.clock.alm_mm = (int8_t)parsed_val[0];
+                g.clock.alm_ss = (int8_t)parsed_val[1];
                 parse_ok = true;
             }
         }
 
         // 匹配 "HOUR HH" 格式
-        else if (num_parsed_tokens == field_token_idx + 2 &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx], "HOUR", 4))
+        else if (g.uart.num_tokens == field_token_idx + 2 &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 4))
         {
             val_token_idx = field_token_idx + 1;
-            parsed_val[0] = atoi((char *)parsed_tokens[val_token_idx].token_str); // 时
+            parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 时
             if (parsed_val[0] >= 0 && parsed_val[0] < 24)
             {
-                alm_hh = (int8_t)parsed_val[0];
+                g.clock.alm_hh = (int8_t)parsed_val[0];
                 parse_ok = true;
             }
         }
 
         // 匹配 "MINUTE MM" 格式
-        else if (num_parsed_tokens == field_token_idx + 2 &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx], "MINUTE", 3))
+        else if (g.uart.num_tokens == field_token_idx + 2 &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "MINUTE", 3))
         {
             val_token_idx = field_token_idx + 1;
-            parsed_val[0] = atoi((char *)parsed_tokens[val_token_idx].token_str); // 分
+            parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 分
             if (parsed_val[0] >= 0 && parsed_val[0] < 60)
             {
-                alm_mm = (int8_t)parsed_val[0];
+                g.clock.alm_mm = (int8_t)parsed_val[0];
                 parse_ok = true;
             }
         }
 
         // 匹配 "SECOND SS" 格式
-        else if (num_parsed_tokens == field_token_idx + 2 &&
-                 compareFieldKeyword(&parsed_tokens[field_token_idx], "SECOND", 3))
+        else if (g.uart.num_tokens == field_token_idx + 2 &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "SECOND", 3))
         {
             val_token_idx = field_token_idx + 1;
-            parsed_val[0] = atoi((char *)parsed_tokens[val_token_idx].token_str); // 秒
+            parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 秒
             if (parsed_val[0] >= 0 && parsed_val[0] < 60)
             {
-                alm_ss = (int8_t)parsed_val[0];
+                g.clock.alm_ss = (int8_t)parsed_val[0];
                 parse_ok = true;
             }
         }
@@ -794,10 +794,10 @@ void ProcessUartCommand(void)
         if (parse_ok) // 如果解析成功，停止闹钟，保存原始值并发送成功消息
         {
             StopAlarmRinging(false);
-            original_alm_hh = alm_hh;
-            original_alm_mm = alm_mm;
-            original_alm_ss = alm_ss;
-            unsaved_changes_active = false;
+            g.clock.original_alm_hh = g.clock.alm_hh;
+            g.clock.original_alm_mm = g.clock.alm_mm;
+            g.clock.original_alm_ss = g.clock.alm_ss;
+            g.clock.unsaved_changes_active = false;
             UpdateTimeAndDisplayBuffers();
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Alarm set successfully.\r\n");
         }
@@ -808,27 +808,27 @@ void ProcessUartCommand(void)
     }
 
     // 处理 "*SET:DISPLAY" 命令 (设置显示开关)
-    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*SET:DISPLAY"))
+    else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*SET:DISPLAY"))
     {
-        if (num_parsed_tokens == current_param_idx + 1) // 确保参数数量正确
+        if (g.uart.num_tokens == current_param_idx + 1) // 确保参数数量正确
         {
-            if (compareTokens(&parsed_tokens[current_param_idx], "ON", 2)) // "ON"
+            if (compareTokens(&g.uart.tokens[current_param_idx], "ON", 2)) // "ON"
             {
-                shifting = true;                 // 开启流动
-                seven_segment_display_on = true; // 开启数码管显示
-                message_active = false;
+                g.disp.shifting = true;                 // 开启流动
+                g.disp.on = true; // 开启数码管显示
+                g.disp.msg_active = false;
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"7-Segment Display turned ON.\r\n");
                 Display_SendEvent();
-                unsaved_changes_active = false;
+                g.clock.unsaved_changes_active = false;
             }
-            else if (compareTokens(&parsed_tokens[current_param_idx], "OFF", 3)) // "OFF"
+            else if (compareTokens(&g.uart.tokens[current_param_idx], "OFF", 3)) // "OFF"
             {
-                shifting = false;                 // 停止流动
-                seven_segment_display_on = false; // 关闭数码管显示
-                message_active = false;
+                g.disp.shifting = false;                 // 停止流动
+                g.disp.on = false; // 关闭数码管显示
+                g.disp.msg_active = false;
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"7-Segment Display turned OFF.\r\n");
                 Display_SendEvent();
-                unsaved_changes_active = false;
+                g.clock.unsaved_changes_active = false;
             }
             else // 无效参数
             {
@@ -842,39 +842,39 @@ void ProcessUartCommand(void)
     }
 
     // 处理 "*SET:FORMAT" 命令 (设置显示格式)
-    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*SET:FORMAT"))
+    else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*SET:FORMAT"))
     {
-        if (num_parsed_tokens == current_param_idx + 1) // 确保参数数量正确
+        if (g.uart.num_tokens == current_param_idx + 1) // 确保参数数量正确
         {
-            if (compareTokens(&parsed_tokens[current_param_idx], "LEFT", 4)) // "LEFT" (左移，正常顺序)
+            if (compareTokens(&g.uart.tokens[current_param_idx], "LEFT", 4)) // "LEFT" (左移，正常顺序)
             {
-                shift_mode = false;
-                display_reversed_order = false;
+                g.disp.shift_mode = false;
+                g.disp.reversed = false;
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Display format set to LEFT flow (normal order).\r\n");
 
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Current Time: ");
-                PutProtocolBuffer(time_transmit_buffer, 8);
+                PutProtocolBuffer(g.disp.time_buf, 8);
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Current Date: ");
-                PutProtocolBuffer(date_transmit_buffer, 10);
+                PutProtocolBuffer(g.disp.date_buf, 10);
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
                 Display_SendEvent();
-                unsaved_changes_active = false;
+                g.clock.unsaved_changes_active = false;
             }
-            else if (compareTokens(&parsed_tokens[current_param_idx], "RIGHT", 5)) // "RIGHT" (右移，反向顺序)
+            else if (compareTokens(&g.uart.tokens[current_param_idx], "RIGHT", 5)) // "RIGHT" (右移，反向顺序)
             {
-                shift_mode = true;
-                display_reversed_order = true;
+                g.disp.shift_mode = true;
+                g.disp.reversed = true;
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Display format set to RIGHT flow (reversed order).\r\n");
 
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Current Time: ");
-                PutProtocolBuffer(time_transmit_buffer, 8);
+                PutProtocolBuffer(g.disp.time_buf, 8);
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Current Date: ");
-                PutProtocolBuffer(date_transmit_buffer, 10);
+                PutProtocolBuffer(g.disp.date_buf, 10);
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
                 Display_SendEvent();
-                unsaved_changes_active = false;
+                g.clock.unsaved_changes_active = false;
             }
             else // 无效参数
             {
@@ -888,19 +888,19 @@ void ProcessUartCommand(void)
     }
 
     // 处理 "*SET:MSG" 命令 (临时消息显示)
-    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*SET:MSG"))
+    else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*SET:MSG"))
     {
         uint8_t payload_offset;
         uint8_t payload_len;
 
-        if (num_parsed_tokens > current_param_idx)
+        if (g.uart.num_tokens > current_param_idx)
         {
             payload_offset = FindRawPayloadOffset(current_param_idx);
-            payload_len = (uint8_t)(uart_receive_len - payload_offset);
+            payload_len = (uint8_t)(g.uart.rx_len - payload_offset);
             if (payload_len > 32)
                 payload_len = 32;
 
-            Display_StartMessage(&uart_receive_buffer[payload_offset], payload_len);
+            Display_StartMessage(&g.uart.rx_buf[payload_offset], payload_len);
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:MSG\r\n");
         }
         else
@@ -910,22 +910,22 @@ void ProcessUartCommand(void)
     }
 
     // 处理 "*SET:LED" 命令 (LED接管)
-    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*SET:LED"))
+    else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*SET:LED"))
     {
         uint8_t led_value;
 
-        if (num_parsed_tokens == current_param_idx + 1 && ParseHexByte(&parsed_tokens[current_param_idx], &led_value))
+        if (g.uart.num_tokens == current_param_idx + 1 && ParseHexByte(&g.uart.tokens[current_param_idx], &led_value))
         {
             if (led_value == 0x00)
             {
-                led_takeover_active = false;
-                led_takeover_pattern = 0x00;
+                g.disp.led_takeover = false;
+                g.disp.led_pattern = 0x00;
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:LED DEFAULT\r\n");
             }
             else
             {
-                led_takeover_active = true;
-                led_takeover_pattern = led_value;
+                g.disp.led_takeover = true;
+                g.disp.led_pattern = led_value;
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:LED TAKEOVER\r\n");
             }
             Display_UpdateStatusLeds();
@@ -937,25 +937,25 @@ void ProcessUartCommand(void)
     }
 
     // 处理 "*SET:MODE" 命令 (夜间模式)
-    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*SET:MODE"))
+    else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*SET:MODE"))
     {
-        if (num_parsed_tokens == current_param_idx + 1)
+        if (g.uart.num_tokens == current_param_idx + 1)
         {
-            if (compareTokens(&parsed_tokens[current_param_idx], "NIGHT", 5))
+            if (compareTokens(&g.uart.tokens[current_param_idx], "NIGHT", 5))
             {
-                night_mode_active = true;
-                seven_segment_display_on = true;
-                message_active = false;
+                g.disp.night_mode = true;
+                g.disp.on = true;
+                g.disp.msg_active = false;
                 PWMStop();
-                if (alarm_ring_start_tick != 0)
-                    alarm_ringing = true;
+                if (g.disp.alarm_ring_start != 0)
+                    g.disp.alarm_ringing = true;
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:MODE NIGHT\r\n");
                 Display_SendEvent();
                 Display_UpdateStatusLeds();
             }
-            else if (compareTokens(&parsed_tokens[current_param_idx], "NORMAL", 6))
+            else if (compareTokens(&g.uart.tokens[current_param_idx], "NORMAL", 6))
             {
-                night_mode_active = false;
+                g.disp.night_mode = false;
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:MODE NORMAL\r\n");
                 Display_SendEvent();
                 Display_UpdateStatusLeds();
@@ -972,45 +972,45 @@ void ProcessUartCommand(void)
     }
 
     // 处理 "*GET:DATE" 命令 (获取日期信息)
-    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*GET:DATE"))
+    else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*GET:DATE"))
     {
         field_token_idx = current_param_idx;
         found_arg = false;
 
         UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Requested Date fields: ");
 
-        if (num_parsed_tokens == field_token_idx) // 如果没有指定字段，则返回完整日期
+        if (g.uart.num_tokens == field_token_idx) // 如果没有指定字段，则返回完整日期
         {
-            PutProtocolBuffer(date_transmit_buffer, 10);
+            PutProtocolBuffer(g.disp.date_buf, 10);
             found_arg = true;
         }
         else // 根据指定字段返回信息
         {
-            for (i = field_token_idx; i < num_parsed_tokens; ++i)
+            for (i = field_token_idx; i < g.uart.num_tokens; ++i)
             {
-                if (compareFieldKeyword(&parsed_tokens[i], "YEAR", 4)) // "YEAR"
+                if (compareFieldKeyword(&g.uart.tokens[i], "YEAR", 4)) // "YEAR"
                 {
                     UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Year=");
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)((year / 1000) % 10) + '0');
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)((year / 100) % 10) + '0');
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)((year / 10) % 10) + '0');
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(year % 10) + '0');
+                    UARTCharPutBlocking(UART0_BASE, (uint8_t)((g.clock.year / 1000) % 10) + '0');
+                    UARTCharPutBlocking(UART0_BASE, (uint8_t)((g.clock.year / 100) % 10) + '0');
+                    UARTCharPutBlocking(UART0_BASE, (uint8_t)((g.clock.year / 10) % 10) + '0');
+                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.year % 10) + '0');
                     UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)" ");
                     found_arg = true;
                 }
-                else if (compareFieldKeyword(&parsed_tokens[i], "MONTH", 5)) // "MONTH"
+                else if (compareFieldKeyword(&g.uart.tokens[i], "MONTH", 5)) // "MONTH"
                 {
                     UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Month=");
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(month / 10) + '0');
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(month % 10) + '0');
+                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.month / 10) + '0');
+                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.month % 10) + '0');
                     UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)" ");
                     found_arg = true;
                 }
-                else if (compareFieldKeyword(&parsed_tokens[i], "DATE", 3)) // "DATE" (日)
+                else if (compareFieldKeyword(&g.uart.tokens[i], "DATE", 3)) // "DATE" (日)
                 {
                     UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Day=");
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(day / 10) + '0');
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(day % 10) + '0');
+                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.day / 10) + '0');
+                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.day % 10) + '0');
                     UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)" ");
                     found_arg = true;
                 }
@@ -1027,43 +1027,43 @@ void ProcessUartCommand(void)
     }
 
     // 处理 "*GET:TIME" 命令 (获取时间信息)
-    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*GET:TIME"))
+    else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*GET:TIME"))
     {
         field_token_idx = current_param_idx;
         found_arg = false;
 
         UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Requested Time fields: ");
 
-        if (num_parsed_tokens == field_token_idx) // 如果没有指定字段，则返回完整时间
+        if (g.uart.num_tokens == field_token_idx) // 如果没有指定字段，则返回完整时间
         {
-            PutProtocolBuffer(time_transmit_buffer, 8);
+            PutProtocolBuffer(g.disp.time_buf, 8);
             found_arg = true;
         }
         else // 根据指定字段返回信息
         {
-            for (i = field_token_idx; i < num_parsed_tokens; ++i)
+            for (i = field_token_idx; i < g.uart.num_tokens; ++i)
             {
-                if (compareFieldKeyword(&parsed_tokens[i], "HOUR", 4)) // "HOUR"
+                if (compareFieldKeyword(&g.uart.tokens[i], "HOUR", 4)) // "HOUR"
                 {
                     UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Hour=");
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(hh / 10) + '0');
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(hh % 10) + '0');
+                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.hh / 10) + '0');
+                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.hh % 10) + '0');
                     UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)" ");
                     found_arg = true;
                 }
-                else if (compareFieldKeyword(&parsed_tokens[i], "MINUTE", 3)) // "MINUTE"
+                else if (compareFieldKeyword(&g.uart.tokens[i], "MINUTE", 3)) // "MINUTE"
                 {
                     UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Minute=");
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(mm / 10) + '0');
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(mm % 10) + '0');
+                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.mm / 10) + '0');
+                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.mm % 10) + '0');
                     UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)" ");
                     found_arg = true;
                 }
-                else if (compareFieldKeyword(&parsed_tokens[i], "SECOND", 3)) // "SECOND"
+                else if (compareFieldKeyword(&g.uart.tokens[i], "SECOND", 3)) // "SECOND"
                 {
                     UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Second=");
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(ss / 10) + '0');
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(ss % 10) + '0');
+                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.ss / 10) + '0');
+                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.ss % 10) + '0');
                     UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)" ");
                     found_arg = true;
                 }
@@ -1080,16 +1080,16 @@ void ProcessUartCommand(void)
     }
 
     // 处理 "*GET:ALARM" 命令 (获取闹钟时间)
-    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*GET:ALARM"))
+    else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*GET:ALARM"))
     {
-        if (num_parsed_tokens == current_param_idx) // 确保没有额外参数
+        if (g.uart.num_tokens == current_param_idx) // 确保没有额外参数
         {
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Current Alarm: ");
-            if (alm_hh == 25) // 未设置闹钟
+            if (g.clock.alm_hh == 25) // 未设置闹钟
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Alarm not set.\r\n");
             else // 显示闹钟时间
             {
-                PutProtocolBuffer(alarm_transmit_buffer, 8);
+                PutProtocolBuffer(g.disp.alarm_buf, 8);
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
             }
         }
@@ -1100,12 +1100,12 @@ void ProcessUartCommand(void)
     }
 
     // 处理 "*GET:FORMAT" 命令 (获取显示格式)
-    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*GET:FORMAT"))
+    else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*GET:FORMAT"))
     {
-        if (num_parsed_tokens == current_param_idx) // 确保没有额外参数
+        if (g.uart.num_tokens == current_param_idx) // 确保没有额外参数
         {
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Current Display Format: ");
-            if (shift_mode == false) // 左移 (正常顺序)
+            if (g.disp.shift_mode == false) // 左移 (正常顺序)
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"LEFT (Normal Order)\r\n");
             else // 右移 (反向顺序)
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"RIGHT (Reversed Order)\r\n");
@@ -1117,12 +1117,12 @@ void ProcessUartCommand(void)
     }
 
     // 处理 "*GET:DISPLAY" 命令 (获取显示状态)
-    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*GET:DISPLAY"))
+    else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*GET:DISPLAY"))
     {
-        if (num_parsed_tokens == current_param_idx) // 确保没有额外参数
+        if (g.uart.num_tokens == current_param_idx) // 确保没有额外参数
         {
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"7-Segment Display Status: ");
-            if (seven_segment_display_on == true) // 开启
+            if (g.disp.on == true) // 开启
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ON (Normal Display)\r\n");
             else // 关闭
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OFF (All Segments Off)\r\n");
@@ -1134,11 +1134,11 @@ void ProcessUartCommand(void)
     }
 
     // 处理 "*MOTOR:START" 命令 (启动步进电机)
-    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*MOTOR:START"))
+    else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*MOTOR:START"))
     {
-        if (num_parsed_tokens == current_param_idx)
+        if (g.uart.num_tokens == current_param_idx)
         {
-            motor_running = 1;
+            g.motor.running = 1;
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Stepper motor started.\r\n");
         }
         else
@@ -1148,11 +1148,11 @@ void ProcessUartCommand(void)
     }
 
     // 处理 "*MOTOR:STOP" 命令 (停止步进电机)
-    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*MOTOR:STOP"))
+    else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*MOTOR:STOP"))
     {
-        if (num_parsed_tokens == current_param_idx)
+        if (g.uart.num_tokens == current_param_idx)
         {
-            motor_running = 0;
+            g.motor.running = 0;
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Stepper motor stopped.\r\n");
         }
         else
@@ -1162,11 +1162,11 @@ void ProcessUartCommand(void)
     }
 
     // 处理 "*MOTOR:FWD" 命令 (设置步进电机正转)
-    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*MOTOR:FWD"))
+    else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*MOTOR:FWD"))
     {
-        if (num_parsed_tokens == current_param_idx)
+        if (g.uart.num_tokens == current_param_idx)
         {
-            motor_direction = 0;
+            g.motor.direction = 0;
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Stepper motor direction set to forward.\r\n");
         }
         else
@@ -1176,11 +1176,11 @@ void ProcessUartCommand(void)
     }
 
     // 处理 "*MOTOR:REV" 命令 (设置步进电机反转)
-    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*MOTOR:REV"))
+    else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*MOTOR:REV"))
     {
-        if (num_parsed_tokens == current_param_idx)
+        if (g.uart.num_tokens == current_param_idx)
         {
-            motor_direction = 1;
+            g.motor.direction = 1;
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Stepper motor direction set to reverse.\r\n");
         }
         else
@@ -1190,16 +1190,16 @@ void ProcessUartCommand(void)
     }
 
     // 处理 "*GET:MOTOR" 命令 (获取步进电机状态)
-    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*GET:MOTOR"))
+    else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*GET:MOTOR"))
     {
-        if (num_parsed_tokens == current_param_idx)
+        if (g.uart.num_tokens == current_param_idx)
         {
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Stepper Motor Status:\r\n");
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"  State: ");
-            UARTStringPutNOBlocking(UART0_BASE, motor_running ? (uint8_t *)"RUNNING" : (uint8_t *)"STOPPED");
+            UARTStringPutNOBlocking(UART0_BASE, g.motor.running ? (uint8_t *)"RUNNING" : (uint8_t *)"STOPPED");
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"  Direction: ");
-            UARTStringPutNOBlocking(UART0_BASE, motor_direction ? (uint8_t *)"REVERSE" : (uint8_t *)"FORWARD");
+            UARTStringPutNOBlocking(UART0_BASE, g.motor.direction ? (uint8_t *)"REVERSE" : (uint8_t *)"FORWARD");
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"  Speed: 1 RPM\r\n");
         }
@@ -1210,28 +1210,28 @@ void ProcessUartCommand(void)
     }
 
     // 处理 "INIT" 命令 (复位)
-    else if (compareTokens(&parsed_tokens[0], "INIT", 4))
+    else if (compareTokens(&g.uart.tokens[0], "INIT", 4))
     {
-        if (num_parsed_tokens == current_param_idx)
+        if (g.uart.num_tokens == current_param_idx)
             SysCtlReset(); // 系统复位
         else
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: INIT\r\n");
     }
 
     // 处理 "HELP" 命令 (显示帮助文档)
-    else if (compareTokens(&parsed_tokens[0], "HELP", 4))
+    else if (compareTokens(&g.uart.tokens[0], "HELP", 4))
     {
-        if (num_parsed_tokens == current_param_idx) // 确保没有额外参数
+        if (g.uart.num_tokens == current_param_idx) // 确保没有额外参数
         {
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"HELP Document:\r\n"
                                                            "*RST                                       : Reset the clock.\r\n"
-                                                           "*SET :DATE YEAR MONTH DATE YYYY MM DD      : Set year, month and day.\r\n"
-                                                           "*SET :DATE YEAR MONTH YYYY MM              : Set year and month.\r\n"
-                                                           "*SET :DATE YEAR DATE YYYY DD               : Set year and day.\r\n"
-                                                           "*SET :DATE MONTH DATE MM DD                : Set month and day.\r\n"
-                                                           "*SET :DATE YEAR YYYY                       : Set year.\r\n"
-                                                           "*SET :DATE MONTH MM                        : Set month.\r\n"
-                                                           "*SET :DATE DATE DD                         : Set day.\r\n"
+                                                           "*SET :DATE YEAR MONTH DATE YYYY MM DD      : Set g.clock.year, g.clock.month and g.clock.day.\r\n"
+                                                           "*SET :DATE YEAR MONTH YYYY MM              : Set g.clock.year and g.clock.month.\r\n"
+                                                           "*SET :DATE YEAR DATE YYYY DD               : Set g.clock.year and g.clock.day.\r\n"
+                                                           "*SET :DATE MONTH DATE MM DD                : Set g.clock.month and g.clock.day.\r\n"
+                                                           "*SET :DATE YEAR YYYY                       : Set g.clock.year.\r\n"
+                                                           "*SET :DATE MONTH MM                        : Set g.clock.month.\r\n"
+                                                           "*SET :DATE DATE DD                         : Set g.clock.day.\r\n"
                                                            "*SET :TIME HOUR MINUTE SECOND HH MM SS     : Set hour, minute and second.\r\n"
                                                            "*SET :TIME HOUR MINUTE HH MM               : Set hour and minute.\r\n"
                                                            "*SET :TIME HOUR SECOND HH SS               : Set hour and second.\r\n"
@@ -1251,13 +1251,13 @@ void ProcessUartCommand(void)
                                                            "*SET :MSG <text>                           : Show a temporary message.\r\n"
                                                            "*SET :LED <hex2>                           : Force LEDs; 00 restores default logic.\r\n"
                                                            "*SET :MODE NIGHT/NORMAL                    : Set night mode.\r\n"
-                                                           "*GET :DATE                                 : Get year, month and day.\r\n"
-                                                           "*GET :DATE YEAR MONTH                      : Get year and month.\r\n"
-                                                           "*GET :DATE YEAR DATE                       : Get year and day.\r\n"
-                                                           "*GET :DATE MONTH DATE                      : Get month and day.\r\n"
-                                                           "*GET :DATE YEAR                            : Get year.\r\n"
-                                                           "*GET :DATE MONTH                           : Get month.\r\n"
-                                                           "*GET :DATE DATE                            : Get day.\r\n"
+                                                           "*GET :DATE                                 : Get g.clock.year, g.clock.month and g.clock.day.\r\n"
+                                                           "*GET :DATE YEAR MONTH                      : Get g.clock.year and g.clock.month.\r\n"
+                                                           "*GET :DATE YEAR DATE                       : Get g.clock.year and g.clock.day.\r\n"
+                                                           "*GET :DATE MONTH DATE                      : Get g.clock.month and g.clock.day.\r\n"
+                                                           "*GET :DATE YEAR                            : Get g.clock.year.\r\n"
+                                                           "*GET :DATE MONTH                           : Get g.clock.month.\r\n"
+                                                           "*GET :DATE DATE                            : Get g.clock.day.\r\n"
                                                            "*GET :TIME                                 : Get hour, minute and second.\r\n"
                                                            "*GET :TIME HOUR MINUTE                     : Get hour and minute.\r\n"
                                                            "*GET :TIME HOUR SECOND                     : Get hour and second.\r\n"
@@ -1281,14 +1281,14 @@ void ProcessUartCommand(void)
     }
     else // 未知命令
     {
-        if (num_parsed_tokens > 0)
+        if (g.uart.num_tokens > 0)
         {
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Unknown command. Type HELP for commands.\r\n");
         }
     }
 
-    uart_receive_len = 0;                                        // 清空接收长度
-    memset(uart_receive_buffer, 0, sizeof(uart_receive_buffer)); // 清空接收缓冲区
+    g.uart.rx_len = 0;                                        // 清空接收长度
+    memset(g.uart.rx_buf, 0, sizeof(g.uart.rx_buf)); // 清空接收缓冲区
 }
 
 // 判断给定年份是否为闰年

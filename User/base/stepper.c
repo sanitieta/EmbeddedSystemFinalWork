@@ -69,24 +69,24 @@ void StepperTimerTick(void)
     uint8_t output = 0;
     TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
 
-    if (!motor_running)
+    if (!g.motor.running)
         return;
 
-    output = stepper_sequence[motor_position & 0x07];
+    output = stepper_sequence[g.motor.position & 0x07];
     GPIOPinWrite(GPIO_PORTF_BASE, STEPPER_PINS, output);
 
-    if (motor_direction == 0)
+    if (g.motor.direction == 0)
     {
-        motor_position++;
-        if (motor_position >= STEPPER_BEATS_PER_REVOLUTION)
-            motor_position = 0;
+        g.motor.position++;
+        if (g.motor.position >= STEPPER_BEATS_PER_REVOLUTION)
+            g.motor.position = 0;
     }
     else
     {
-        if (motor_position == 0)
-            motor_position = STEPPER_BEATS_PER_REVOLUTION - 1;
+        if (g.motor.position == 0)
+            g.motor.position = STEPPER_BEATS_PER_REVOLUTION - 1;
         else
-            motor_position--;
+            g.motor.position--;
     }
 }
 

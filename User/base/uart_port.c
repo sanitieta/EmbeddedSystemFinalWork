@@ -36,7 +36,7 @@ void UARTInit(void)
 
     // 配置UART0，波特率115200，8位数据，1位停止位，无奇偶校验
     UARTConfigSetExpClk(UART0_BASE,
-                        ui32SysClock,
+                        g.sys_clock_hz,
                         115200,
                         (UART_CONFIG_WLEN_8 |
                          UART_CONFIG_STOP_ONE |

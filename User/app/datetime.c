@@ -46,7 +46,7 @@ bool is_valid_date(uint16_t y, uint8_t m, uint8_t d)
         return false;
     }
 
-    max_days = days_in_month[m];   // 获取当前月份的最大天数
+    max_days = g.rtc.days_in_month[m];   // 获取当前月份的最大天数
     if (m == 2 && is_leap_year(y)) // 如果是闰年的2月
     {
         max_days = 29; // 2月有29天
@@ -72,34 +72,34 @@ void DateTime_TickOneSecond(void)
 {
     uint8_t max_days_for_current_month;
 
-    ss++;
-    if (ss >= 60)
+    g.clock.ss++;
+    if (g.clock.ss >= 60)
     {
-        mm++;
-        ss = 0;
+        g.clock.mm++;
+        g.clock.ss = 0;
     }
-    if (mm >= 60)
+    if (g.clock.mm >= 60)
     {
-        hh++;
-        mm = 0;
+        g.clock.hh++;
+        g.clock.mm = 0;
     }
-    if (hh >= 24)
+    if (g.clock.hh >= 24)
     {
-        day++;
-        hh = 0;
-        max_days_for_current_month = days_in_month[month];
-        if (month == 2 && is_leap_year(year))
+        g.clock.day++;
+        g.clock.hh = 0;
+        max_days_for_current_month = g.rtc.days_in_month[g.clock.month];
+        if (g.clock.month == 2 && is_leap_year(g.clock.year))
         {
             max_days_for_current_month = 29;
         }
-        if (day > max_days_for_current_month)
+        if (g.clock.day > max_days_for_current_month)
         {
-            day = 1;
-            month++;
-            if (month > 12)
+            g.clock.day = 1;
+            g.clock.month++;
+            if (g.clock.month > 12)
             {
-                month = 1;
-                year++;
+                g.clock.month = 1;
+                g.clock.year++;
             }
         }
     }

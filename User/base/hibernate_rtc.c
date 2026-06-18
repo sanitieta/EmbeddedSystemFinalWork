@@ -28,7 +28,7 @@ void HibernateInit(void)
     SysCtlPeripheralEnable(SYSCTL_PERIPH_HIBERNATE);        // 使能休眠模块时钟
     while (!SysCtlPeripheralReady(SYSCTL_PERIPH_HIBERNATE)) // 等待模块就绪
         ;
-    HibernateEnableExpClk(ui32SysClock);          // 使用系统时钟初始化休眠模块
+    HibernateEnableExpClk(g.sys_clock_hz);          // 使用系统时钟初始化休眠模块
     HibernateClockConfig(HIBERNATE_OSC_LOWDRIVE); // 配置低功耗振荡器
     HibernateRTCEnable();                         // 使能RTC
 }

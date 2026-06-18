@@ -39,6 +39,97 @@ static uint8_t toUpper(uint8_t c)
     return c;
 }
 
+static int8_t HexValue(uint8_t c)
+{
+    if (c >= '0' && c <= '9')
+        return (int8_t)(c - '0');
+    c = toUpper(c);
+    if (c >= 'A' && c <= 'F')
+        return (int8_t)(c - 'A' + 10);
+    return -1;
+}
+
+static bool ParseHexByte(const command_token_t *token, uint8_t *value)
+{
+    int8_t hi;
+    int8_t lo;
+
+    if (token->token_len != 2)
+        return false;
+
+    hi = HexValue(token->token_str[0]);
+    lo = HexValue(token->token_str[1]);
+    if (hi < 0 || lo < 0)
+        return false;
+
+    *value = (uint8_t)(((uint8_t)hi << 4) | (uint8_t)lo);
+    return true;
+}
+
+static void PutProtocolBuffer(const uint8_t *buffer, uint8_t len)
+{
+    uint8_t formatted[12];
+    uint8_t normalized[12];
+    uint8_t i;
+
+    for (i = 0; i < len; ++i)
+    {
+        normalized[i] = (buffer[i] == ':' || buffer[i] == '-') ? '.' : buffer[i];
+    }
+    normalized[len] = '\0';
+
+    Display_FormatBufferForProtocol(normalized, len, formatted);
+    UARTStringPutNOBlocking(UART0_BASE, formatted);
+}
+
+static void ResetProtocolState(void)
+{
+    seven_segment_display_on = true;
+    shift_mode = false;
+    display_reversed_order = false;
+    night_mode_active = false;
+    led_takeover_active = false;
+    led_takeover_pattern = 0x00;
+    message_active = false;
+    message_scroll_active = false;
+    message_len = 0;
+    message_shift = 0;
+    shifting = true;
+    current_mode = MODE_FLOWING;
+    current_setting_field = FIELD_NONE;
+    is_blinking = false;
+    main_display_mode = MAIN_DISPLAY_TIME;
+    StopAlarmRinging(false);
+    UpdateTimeAndDisplayBuffers();
+    Display_UpdateStatusLeds();
+}
+
+static uint8_t FindRawPayloadOffset(uint8_t token_idx)
+{
+    uint8_t i;
+    uint8_t current_token = 0;
+    bool in_token = false;
+
+    for (i = 0; i < uart_receive_len; ++i)
+    {
+        if (uart_receive_buffer[i] != ' ')
+        {
+            if (!in_token)
+            {
+                if (current_token == token_idx)
+                    return i;
+                current_token++;
+                in_token = true;
+            }
+        }
+        else
+        {
+            in_token = false;
+        }
+    }
+    return uart_receive_len;
+}
+
 // 比较命令Token与字符串，支持最小匹配长度
 
 // 比较命令Token与字符串，支持最小匹配长度
@@ -306,8 +397,8 @@ void ProcessUartCommand(void)
     {
         if (num_parsed_tokens == current_param_idx) // 确保没有额外参数
         {
-            SysCtlReset(); // 系统复位
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"System reset initiated.\r\n");
+            ResetProtocolState();
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:RST\r\n");
         }
         else
         {
@@ -452,6 +543,7 @@ void ProcessUartCommand(void)
             original_month = month;
             original_day = day;
             unsaved_changes_active = false;
+            UpdateTimeAndDisplayBuffers();
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Date set successfully.\r\n");
         }
         else // 解析失败，发送错误消息
@@ -578,6 +670,7 @@ void ProcessUartCommand(void)
             original_mm = mm;
             original_ss = ss;
             unsaved_changes_active = false;
+            UpdateTimeAndDisplayBuffers();
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Time set successfully.\r\n");
         }
         else // 解析失败，发送错误消息
@@ -700,11 +793,12 @@ void ProcessUartCommand(void)
 
         if (parse_ok) // 如果解析成功，停止闹钟，保存原始值并发送成功消息
         {
-            PWMStop();
+            StopAlarmRinging(false);
             original_alm_hh = alm_hh;
             original_alm_mm = alm_mm;
             original_alm_ss = alm_ss;
             unsaved_changes_active = false;
+            UpdateTimeAndDisplayBuffers();
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Alarm set successfully.\r\n");
         }
         else // 解析失败，发送错误消息
@@ -722,14 +816,18 @@ void ProcessUartCommand(void)
             {
                 shifting = true;                 // 开启流动
                 seven_segment_display_on = true; // 开启数码管显示
+                message_active = false;
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"7-Segment Display turned ON.\r\n");
+                Display_SendEvent();
                 unsaved_changes_active = false;
             }
             else if (compareTokens(&parsed_tokens[current_param_idx], "OFF", 3)) // "OFF"
             {
                 shifting = false;                 // 停止流动
                 seven_segment_display_on = false; // 关闭数码管显示
+                message_active = false;
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"7-Segment Display turned OFF.\r\n");
+                Display_SendEvent();
                 unsaved_changes_active = false;
             }
             else // 无效参数
@@ -755,11 +853,12 @@ void ProcessUartCommand(void)
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Display format set to LEFT flow (normal order).\r\n");
 
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Current Time: ");
-                UARTStringPutNOBlocking(UART0_BASE, time_transmit_buffer);
+                PutProtocolBuffer(time_transmit_buffer, 8);
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Current Date: ");
-                UARTStringPutNOBlocking(UART0_BASE, date_transmit_buffer);
+                PutProtocolBuffer(date_transmit_buffer, 10);
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
+                Display_SendEvent();
                 unsaved_changes_active = false;
             }
             else if (compareTokens(&parsed_tokens[current_param_idx], "RIGHT", 5)) // "RIGHT" (右移，反向顺序)
@@ -769,11 +868,12 @@ void ProcessUartCommand(void)
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Display format set to RIGHT flow (reversed order).\r\n");
 
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Current Time: ");
-                UARTStringPutReversedNOBlocking(UART0_BASE, time_transmit_buffer); // 反向显示时间
+                PutProtocolBuffer(time_transmit_buffer, 8);
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Current Date: ");
-                UARTStringPutReversedNOBlocking(UART0_BASE, date_transmit_buffer); // 反向显示日期
+                PutProtocolBuffer(date_transmit_buffer, 10);
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
+                Display_SendEvent();
                 unsaved_changes_active = false;
             }
             else // 无效参数
@@ -787,6 +887,90 @@ void ProcessUartCommand(void)
         }
     }
 
+    // 处理 "*SET:MSG" 命令 (临时消息显示)
+    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*SET:MSG"))
+    {
+        uint8_t payload_offset;
+        uint8_t payload_len;
+
+        if (num_parsed_tokens > current_param_idx)
+        {
+            payload_offset = FindRawPayloadOffset(current_param_idx);
+            payload_len = (uint8_t)(uart_receive_len - payload_offset);
+            if (payload_len > 32)
+                payload_len = 32;
+
+            Display_StartMessage(&uart_receive_buffer[payload_offset], payload_len);
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:MSG\r\n");
+        }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *SET:MSG <text>\r\n");
+        }
+    }
+
+    // 处理 "*SET:LED" 命令 (LED接管)
+    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*SET:LED"))
+    {
+        uint8_t led_value;
+
+        if (num_parsed_tokens == current_param_idx + 1 && ParseHexByte(&parsed_tokens[current_param_idx], &led_value))
+        {
+            if (led_value == 0x00)
+            {
+                led_takeover_active = false;
+                led_takeover_pattern = 0x00;
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:LED DEFAULT\r\n");
+            }
+            else
+            {
+                led_takeover_active = true;
+                led_takeover_pattern = led_value;
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:LED TAKEOVER\r\n");
+            }
+            Display_UpdateStatusLeds();
+        }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *SET:LED <hex2>\r\n");
+        }
+    }
+
+    // 处理 "*SET:MODE" 命令 (夜间模式)
+    else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*SET:MODE"))
+    {
+        if (num_parsed_tokens == current_param_idx + 1)
+        {
+            if (compareTokens(&parsed_tokens[current_param_idx], "NIGHT", 5))
+            {
+                night_mode_active = true;
+                seven_segment_display_on = true;
+                message_active = false;
+                PWMStop();
+                if (alarm_ring_start_tick != 0)
+                    alarm_ringing = true;
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:MODE NIGHT\r\n");
+                Display_SendEvent();
+                Display_UpdateStatusLeds();
+            }
+            else if (compareTokens(&parsed_tokens[current_param_idx], "NORMAL", 6))
+            {
+                night_mode_active = false;
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:MODE NORMAL\r\n");
+                Display_SendEvent();
+                Display_UpdateStatusLeds();
+            }
+            else
+            {
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid argument. Usage: *SET:MODE NIGHT/NORMAL\r\n");
+            }
+        }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *SET:MODE NIGHT/NORMAL\r\n");
+        }
+    }
+
     // 处理 "*GET:DATE" 命令 (获取日期信息)
     else if (matchCommand(&parsed_tokens[0], (num_parsed_tokens > 1 ? &parsed_tokens[1] : NULL), num_parsed_tokens, "*GET:DATE"))
     {
@@ -797,7 +981,7 @@ void ProcessUartCommand(void)
 
         if (num_parsed_tokens == field_token_idx) // 如果没有指定字段，则返回完整日期
         {
-            UARTStringPutNOBlocking(UART0_BASE, date_transmit_buffer);
+            PutProtocolBuffer(date_transmit_buffer, 10);
             found_arg = true;
         }
         else // 根据指定字段返回信息
@@ -852,7 +1036,7 @@ void ProcessUartCommand(void)
 
         if (num_parsed_tokens == field_token_idx) // 如果没有指定字段，则返回完整时间
         {
-            UARTStringPutNOBlocking(UART0_BASE, time_transmit_buffer);
+            PutProtocolBuffer(time_transmit_buffer, 8);
             found_arg = true;
         }
         else // 根据指定字段返回信息
@@ -905,7 +1089,7 @@ void ProcessUartCommand(void)
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Alarm not set.\r\n");
             else // 显示闹钟时间
             {
-                UARTStringPutNOBlocking(UART0_BASE, alarm_transmit_buffer);
+                PutProtocolBuffer(alarm_transmit_buffer, 8);
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
             }
         }
@@ -1064,6 +1248,9 @@ void ProcessUartCommand(void)
                                                            "*SET :ALARM SECOND SS                      : Set alarm second.\r\n"
                                                            "*SET :DISPLAY ON/OFF                       : Set 7-segment display.\r\n"
                                                            "*SET :FORMAT LEFT/RIGHT                    : Set display flow direction and order.\r\n"
+                                                           "*SET :MSG <text>                           : Show a temporary message.\r\n"
+                                                           "*SET :LED <hex2>                           : Force LEDs; 00 restores default logic.\r\n"
+                                                           "*SET :MODE NIGHT/NORMAL                    : Set night mode.\r\n"
                                                            "*GET :DATE                                 : Get year, month and day.\r\n"
                                                            "*GET :DATE YEAR MONTH                      : Get year and month.\r\n"
                                                            "*GET :DATE YEAR DATE                       : Get year and day.\r\n"

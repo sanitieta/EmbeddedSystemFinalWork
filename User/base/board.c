@@ -41,7 +41,7 @@ void DevicesInit(void)
     PWMInit();         // 初始化PWM
     S800_I2C0_Init();  // 初始化I2C0
     HibernateInit();   // 初始化休眠模块
-    // UserKeyGPIOInit(); // 初始化USER1/USER2按键
+    UserKeyGPIOInit(); // 初始化USER1/USER2按键
     StepperGPIOInit(); // 初始化步进电机GPIO
     StepperTimerInit();// 初始化步进电机Timer
     IntMasterEnable(); // 开启总中断

@@ -68,16 +68,18 @@ void ProcessButtonEvents(void)
         }
     }
 
-    // if (user_key_short_press_event[0])
-    // {
-    //     UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:KEY USER1\r\n");
-    //     user_key_short_press_event[0] = false;
-    // }
-    // if (user_key_short_press_event[1])
-    // {
-    //     UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:KEY USER2\r\n");
-    //     user_key_short_press_event[1] = false;
-    // }
+    if (user_key_short_press_event[0])
+    {
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:KEY USER1\r\n");
+        uart_activity_until_tick = g_system_tick + UART_ACTIVITY_FLASH_MS;
+        user_key_short_press_event[0] = false;
+    }
+    if (user_key_short_press_event[1])
+    {
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:KEY USER2\r\n");
+        uart_activity_until_tick = g_system_tick + UART_ACTIVITY_FLASH_MS;
+        user_key_short_press_event[1] = false;
+    }
 }
 
 static void EnterNextEditMode(void)
@@ -327,6 +329,12 @@ static void ToggleDisplayFormat(void)
 static void HandleButtonShortPress(uint8_t button_num)
 {
     mode_timeout_timer = g_system_tick; // 重置模式超时定时器
+
+    if (message_active && button_num != 1)
+    {
+        Display_StopMessage();
+        return;
+    }
 
     switch (button_num)
     {

@@ -34,13 +34,64 @@ void HandleAlarm(void)
     {
         if (!alarm_ringing && !alarm_silenced_for_match)
         {
-            PWMStart(500); // 启动PWM作为闹钟提示音
             alarm_ringing = true;
+            alarm_ring_start_tick = g_system_tick;
+            alarm_beep_phase_tick = g_system_tick;
+            if (night_mode_active)
+            {
+                alarm_beep_on = false;
+            }
+            else
+            {
+                PWMStart(500);
+                alarm_beep_on = true;
+            }
         }
     }
     else
     {
         alarm_silenced_for_match = false;
+    }
+
+    if (!alarm_ringing)
+    {
+        return;
+    }
+
+    if ((g_system_tick - alarm_ring_start_tick) >= ALARM_RING_MAX_MS)
+    {
+        StopAlarmRinging(false);
+        alarm_silenced_for_match = true;
+        return;
+    }
+
+    if (night_mode_active)
+    {
+        if (alarm_beep_on)
+        {
+            PWMStop();
+            alarm_ringing = true;
+            alarm_beep_on = false;
+        }
+        return;
+    }
+
+    if (!alarm_beep_on)
+    {
+        if ((g_system_tick - alarm_beep_phase_tick) >= ALARM_BEEP_OFF_MS)
+        {
+            PWMStart(500);
+            alarm_ringing = true;
+            alarm_beep_on = true;
+            alarm_beep_phase_tick = g_system_tick;
+        }
+    }
+    else if ((g_system_tick - alarm_beep_phase_tick) >= ALARM_BEEP_ON_MS)
+    {
+        PWMStop();
+        alarm_ringing = true;
+        alarm_beep_on = false;
+        alarm_beep_phase_tick = g_system_tick;
     }
 }
 
@@ -50,6 +101,9 @@ void StopAlarmRinging(bool silence_current_match)
 {
     PWMStop();
     alarm_ringing = false;
+    alarm_beep_on = false;
+    alarm_ring_start_tick = 0;
+    alarm_beep_phase_tick = 0;
     if (silence_current_match)
     {
         alarm_silenced_for_match = true;

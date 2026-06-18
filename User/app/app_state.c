@@ -76,7 +76,7 @@ uint8_t date_transmit_buffer[11]; // 日期显示缓冲区
 uint8_t seg7[] = {0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f,
                   0x77, 0x7c, 0x58, 0x5e, 0x79, 0x71, 0x5c, 0x00}; // 7段数码管字形码
 
-uint8_t stuID[8] = {0x4F, 0x06, 0x6F, 0x06, 0x3F, 0x07, 0x07, 0x5B}; // 学生ID字形码 31910772
+uint8_t stuID[8] = {0x6D, 0x5B, 0x66, 0x3F, 0x4F, 0x06, 0x6F, 0x06}; // 学生ID前8位 52403191
 uint8_t name[8] = {0x76, 0x3E, 0x76, 0x77, 0x3F, 0x77, 0x77, 0x54};  // 名字字形码 XUHAORAN
 
 uint8_t result;            // I2C操作结果
@@ -94,6 +94,20 @@ bool display_reversed_order = false; // 显示是否反向
 bool seven_segment_display_on = true; // 7段数码管是否开启
 bool alarm_ringing = false;           // 闹钟是否正在响铃
 bool alarm_silenced_for_match = false; // 当前闹钟匹配秒是否已被手动静音
+bool night_mode_active = false;        // 夜间模式
+bool led_takeover_active = false;      // LED上位机接管
+uint8_t led_takeover_pattern = 0x00;   // LED接管输出
+volatile uint32_t uart_activity_until_tick = 0; // UART活动指示截止时间
+uint32_t alarm_ring_start_tick = 0;    // 闹钟响铃开始时间
+uint32_t alarm_beep_phase_tick = 0;    // 闹钟蜂鸣相位起点
+bool alarm_beep_on = false;            // 闹钟蜂鸣当前是否开启
+bool message_active = false;           // 临时消息显示
+bool message_scroll_active = false;    // 临时消息是否滚动
+uint8_t message_buffer[33];            // 临时消息文本
+uint8_t message_len = 0;               // 临时消息长度
+int8_t message_shift = 0;              // 临时消息滚动偏移
+uint32_t message_start_tick = 0;       // 临时消息开始时间
+uint32_t message_last_shift_tick = 0;  // 临时消息上次滚动时间
 
 volatile uint8_t raw_key_value = 0xFF;       // 按钮原始值
 volatile uint8_t prev_raw_key_value = 0xFF;  // 上一个按钮原始值

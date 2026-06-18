@@ -29,5 +29,3 @@ void Delay(uint32_t value)
     for (ui32Loop = 0; ui32Loop < value; ui32Loop++)
         ;
 }
-
-// 初始化步进电机GPIO (PF0-PF3)

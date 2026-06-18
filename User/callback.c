@@ -33,6 +33,7 @@ void UART0_Handler(void)
 
     uart0_int_status = UARTIntStatus(UART0_BASE, true); // 获取中断状态
     UARTIntClear(UART0_BASE, uart0_int_status);         // 清除中断标志
+    uart_activity_until_tick = g_system_tick + UART_ACTIVITY_FLASH_MS;
 
     while (UARTCharsAvail(UART0_BASE)) // 检查是否有可用字符
     {
@@ -59,8 +60,8 @@ void SysTick_Handler(void)
 {
     int i = 0;
     uint8_t current_button_raw_value;
-    // uint8_t current_user_raw_value;
-    // uint8_t current_user_pin;
+    uint8_t current_user_raw_value;
+    uint8_t current_user_pin;
     uint8_t max_days_for_current_month;
     bool any_button_is_currently_pressed_debounced = false; // 任何按钮是否处于去抖后的按下状态
     uint32_t press_duration;                                // 按钮按下持续时间
@@ -200,6 +201,38 @@ void SysTick_Handler(void)
                 key_repeat_press_event[i] = false;
                 key_long_press_timer[i] = 0;
                 key_press_start_time[i] = 0;
+            }
+        }
+    }
+
+    current_user_raw_value = GPIOPinRead(GPIO_PORTJ_BASE, GPIO_PIN_0 | GPIO_PIN_1);
+    for (i = 0; i < 2; ++i)
+    {
+        current_user_pin = (i == 0) ? GPIO_PIN_0 : GPIO_PIN_1;
+        if ((current_user_raw_value & current_user_pin) == 0)
+        {
+            if (user_key_debounce_timer[i] < DEBOUNCE_TIME_MS)
+                user_key_debounce_timer[i]++;
+
+            if (user_key_debounce_timer[i] == DEBOUNCE_TIME_MS && user_key_states[i] == false)
+            {
+                user_key_states[i] = true;
+                user_key_press_start_time[i] = g_system_tick;
+            }
+        }
+        else
+        {
+            if (user_key_debounce_timer[i] > 0)
+                user_key_debounce_timer[i]--;
+
+            if (user_key_debounce_timer[i] == 0 && user_key_states[i] == true)
+            {
+                user_key_states[i] = false;
+                if (g_system_tick - user_key_press_start_time[i] >= DEBOUNCE_TIME_MS)
+                {
+                    user_key_short_press_event[i] = true;
+                }
+                user_key_press_start_time[i] = 0;
             }
         }
     }

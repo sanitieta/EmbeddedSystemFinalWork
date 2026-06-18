@@ -27,6 +27,339 @@
 #include "datetime.h"
 #include "display.h"
 
+static uint8_t DigitToAscii(uint8_t digit)
+{
+    return (uint8_t)('0' + digit);
+}
+
+static uint8_t HexDigit(uint8_t value)
+{
+    value &= 0x0F;
+    return (uint8_t)(value < 10 ? ('0' + value) : ('A' + value - 10));
+}
+
+static uint8_t SegmentForChar(uint8_t c)
+{
+    if (c >= '0' && c <= '9')
+        return seg7[c - '0'];
+    if (c >= 'a' && c <= 'z')
+        c = (uint8_t)(c - 0x20);
+
+    switch (c)
+    {
+    case 'A':
+        return 0x77;
+    case 'B':
+        return 0x7C;
+    case 'C':
+        return 0x39;
+    case 'D':
+        return 0x5E;
+    case 'E':
+        return 0x79;
+    case 'F':
+        return 0x71;
+    case 'G':
+        return 0x3D;
+    case 'H':
+        return 0x76;
+    case 'I':
+        return 0x06;
+    case 'J':
+        return 0x1E;
+    case 'L':
+        return 0x38;
+    case 'N':
+        return 0x54;
+    case 'O':
+        return 0x3F;
+    case 'P':
+        return 0x73;
+    case 'R':
+        return 0x50;
+    case 'S':
+        return 0x6D;
+    case 'T':
+        return 0x78;
+    case 'U':
+        return 0x3E;
+    case 'V':
+        return 0x3E;
+    case 'X':
+        return 0x76;
+    case 'Y':
+        return 0x6E;
+    case '-':
+        return 0x40;
+    case '_':
+    case ' ':
+        return 0x00;
+    default:
+        return 0x00;
+    }
+}
+
+static void BuildCurrentDisplay(uint8_t chars[8], uint8_t *dp_hex)
+{
+    uint8_t i;
+
+    for (i = 0; i < 8; ++i)
+    {
+        chars[i] = '_';
+    }
+    *dp_hex = 0x00;
+
+    if (!seven_segment_display_on)
+    {
+        return;
+    }
+
+    if (message_active)
+    {
+        for (i = 0; i < 8; ++i)
+        {
+            uint8_t msg_index = (uint8_t)(message_shift + i);
+            if (msg_index < message_len)
+            {
+                chars[i] = message_buffer[msg_index];
+            }
+        }
+        return;
+    }
+
+    if (night_mode_active)
+    {
+        chars[0] = DigitToAscii((uint8_t)(hh / 10));
+        chars[1] = DigitToAscii((uint8_t)(hh % 10));
+        chars[2] = DigitToAscii((uint8_t)(mm / 10));
+        chars[3] = DigitToAscii((uint8_t)(mm % 10));
+        *dp_hex = 0x02;
+        return;
+    }
+
+    if (current_mode == MODE_DATE_SET)
+    {
+        chars[0] = DigitToAscii((uint8_t)((temp_year / 1000) % 10));
+        chars[1] = DigitToAscii((uint8_t)((temp_year / 100) % 10));
+        chars[2] = DigitToAscii((uint8_t)((temp_year / 10) % 10));
+        chars[3] = DigitToAscii((uint8_t)(temp_year % 10));
+        chars[4] = DigitToAscii((uint8_t)(temp_month / 10));
+        chars[5] = DigitToAscii((uint8_t)(temp_month % 10));
+        chars[6] = DigitToAscii((uint8_t)(temp_day / 10));
+        chars[7] = DigitToAscii((uint8_t)(temp_day % 10));
+        *dp_hex = 0x28;
+        return;
+    }
+
+    if (current_mode == MODE_TIME_SET)
+    {
+        chars[0] = DigitToAscii((uint8_t)(temp_hh / 10));
+        chars[1] = DigitToAscii((uint8_t)(temp_hh % 10));
+        chars[2] = DigitToAscii((uint8_t)(temp_mm / 10));
+        chars[3] = DigitToAscii((uint8_t)(temp_mm % 10));
+        chars[4] = DigitToAscii((uint8_t)(temp_ss / 10));
+        chars[5] = DigitToAscii((uint8_t)(temp_ss % 10));
+        *dp_hex = 0x0A;
+        return;
+    }
+
+    if (current_mode == MODE_ALARM_SET || current_mode == MODE_ALARM_DISPLAY)
+    {
+        uint8_t show_hh = (current_mode == MODE_ALARM_SET) ? temp_alm_hh : (uint8_t)alm_hh;
+        uint8_t show_mm = (current_mode == MODE_ALARM_SET) ? temp_alm_mm : (uint8_t)alm_mm;
+        uint8_t show_ss = (current_mode == MODE_ALARM_SET) ? temp_alm_ss : (uint8_t)alm_ss;
+
+        if (alm_hh == 25 && current_mode == MODE_ALARM_DISPLAY)
+        {
+            memcpy(chars, "AL xx xx", 8);
+        }
+        else
+        {
+            chars[0] = DigitToAscii((uint8_t)(show_hh / 10));
+            chars[1] = DigitToAscii((uint8_t)(show_hh % 10));
+            chars[2] = DigitToAscii((uint8_t)(show_mm / 10));
+            chars[3] = DigitToAscii((uint8_t)(show_mm % 10));
+            chars[4] = DigitToAscii((uint8_t)(show_ss / 10));
+            chars[5] = DigitToAscii((uint8_t)(show_ss % 10));
+            *dp_hex = 0x0A;
+        }
+        return;
+    }
+
+    if (main_display_mode == MAIN_DISPLAY_DATE)
+    {
+        chars[0] = DigitToAscii((uint8_t)((year / 10) % 10));
+        chars[1] = DigitToAscii((uint8_t)(year % 10));
+        chars[2] = DigitToAscii((uint8_t)(month / 10));
+        chars[3] = DigitToAscii((uint8_t)(month % 10));
+        chars[4] = DigitToAscii((uint8_t)(day / 10));
+        chars[5] = DigitToAscii((uint8_t)(day % 10));
+        *dp_hex = 0x0A;
+    }
+    else if (main_display_mode == MAIN_DISPLAY_YEAR)
+    {
+        chars[0] = DigitToAscii((uint8_t)((year / 1000) % 10));
+        chars[1] = DigitToAscii((uint8_t)((year / 100) % 10));
+        chars[2] = DigitToAscii((uint8_t)((year / 10) % 10));
+        chars[3] = DigitToAscii((uint8_t)(year % 10));
+        chars[4] = DigitToAscii((uint8_t)(month / 10));
+        chars[5] = DigitToAscii((uint8_t)(month % 10));
+        chars[6] = DigitToAscii((uint8_t)(day / 10));
+        chars[7] = DigitToAscii((uint8_t)(day % 10));
+        *dp_hex = 0x28;
+    }
+    else
+    {
+        chars[0] = DigitToAscii((uint8_t)(hh / 10));
+        chars[1] = DigitToAscii((uint8_t)(hh % 10));
+        chars[2] = DigitToAscii((uint8_t)(mm / 10));
+        chars[3] = DigitToAscii((uint8_t)(mm % 10));
+        chars[4] = DigitToAscii((uint8_t)(ss / 10));
+        chars[5] = DigitToAscii((uint8_t)(ss % 10));
+        *dp_hex = 0x0A;
+    }
+}
+
+static uint8_t ReverseDpBitmap(uint8_t left_dp)
+{
+    uint8_t right_dp = 0;
+    uint8_t i;
+
+    for (i = 0; i < 8; ++i)
+    {
+        if (left_dp & (uint8_t)(1U << i))
+        {
+            if (i <= 6)
+            {
+                right_dp |= (uint8_t)(1U << (6 - i));
+            }
+        }
+    }
+    return right_dp;
+}
+
+void Display_SetLedOutput(uint8_t led_pattern)
+{
+    result = I2C0_WriteByte(PCA9557_I2CADDR, PCA9557_OUTPUT, (uint8_t)~led_pattern);
+}
+
+void Display_UpdateStatusLeds(void)
+{
+    uint8_t pattern;
+
+    if (led_takeover_active)
+    {
+        Display_SetLedOutput(led_takeover_pattern);
+        return;
+    }
+
+    pattern = 0x00;
+    if ((g_system_tick % V_T1s) < V_T500ms)
+    {
+        pattern |= 0x01;
+    }
+
+    if (!night_mode_active)
+    {
+        if (alarm_ringing)
+        {
+            if ((g_system_tick % 400U) < 200U)
+                pattern |= 0x02;
+        }
+        else if (alm_hh != 25)
+        {
+            pattern |= 0x02;
+        }
+
+        if (current_mode == MODE_DATE_SET || current_mode == MODE_TIME_SET || current_mode == MODE_ALARM_SET)
+        {
+            pattern |= 0x04;
+        }
+
+        if ((int32_t)(uart_activity_until_tick - g_system_tick) > 0)
+        {
+            pattern |= 0x08;
+        }
+    }
+
+    Display_SetLedOutput(pattern);
+}
+
+void Display_FormatBufferForProtocol(const uint8_t *src, uint8_t len, uint8_t *dst)
+{
+    uint8_t i;
+
+    if (display_reversed_order)
+    {
+        for (i = 0; i < len; ++i)
+        {
+            dst[i] = src[len - 1U - i];
+        }
+    }
+    else
+    {
+        memcpy(dst, src, len);
+    }
+    dst[len] = '\0';
+}
+
+void Display_SendEvent(void)
+{
+    uint8_t chars[8];
+    uint8_t out_chars[9];
+    uint8_t dp_hex;
+    uint8_t out_dp_hex;
+
+    BuildCurrentDisplay(chars, &dp_hex);
+    if (display_reversed_order)
+    {
+        Display_FormatBufferForProtocol(chars, 8, out_chars);
+        out_dp_hex = ReverseDpBitmap(dp_hex);
+    }
+    else
+    {
+        memcpy(out_chars, chars, 8);
+        out_chars[8] = '\0';
+        out_dp_hex = dp_hex;
+    }
+
+    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:DISP ");
+    UARTStringPutNOBlocking(UART0_BASE, out_chars);
+    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)" ");
+    UARTCharPutBlocking(UART0_BASE, HexDigit((uint8_t)(out_dp_hex >> 4)));
+    UARTCharPutBlocking(UART0_BASE, HexDigit(out_dp_hex));
+    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
+    uart_activity_until_tick = g_system_tick + UART_ACTIVITY_FLASH_MS;
+}
+
+void Display_StartMessage(const uint8_t *text, uint8_t len)
+{
+    if (len > 32)
+        len = 32;
+
+    memcpy(message_buffer, text, len);
+    message_buffer[len] = '\0';
+    message_len = len;
+    message_shift = 0;
+    message_active = true;
+    message_scroll_active = (len > 8);
+    message_start_tick = g_system_tick;
+    message_last_shift_tick = g_system_tick;
+    shifting = false;
+    seven_segment_display_on = true;
+    Display_SendEvent();
+}
+
+void Display_StopMessage(void)
+{
+    message_active = false;
+    message_scroll_active = false;
+    message_len = 0;
+    message_shift = 0;
+    shifting = true;
+    UpdateTimeAndDisplayBuffers();
+}
+
 // 更新7段数码管显示
 void Update7SegmentDisplay(void)
 {
@@ -41,7 +374,7 @@ void Update7SegmentDisplay(void)
         // 关闭所有数码管
         result = I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT2, 0x00);
         result = I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT1, 0x00);
-        result = I2C0_WriteByte(PCA9557_I2CADDR, PCA9557_OUTPUT, 0x00);
+        Display_UpdateStatusLeds();
         return;
     }
 
@@ -49,7 +382,28 @@ void Update7SegmentDisplay(void)
 
     local_cnt = cnt; // 获取当前轮询的数码管索引
 
-    if (current_mode == MODE_FLOWING) // 流动显示模式
+    if (message_active)
+    {
+        uint8_t msg_index = (uint8_t)(message_shift + local_cnt);
+        if (msg_index < message_len)
+            segment_data = SegmentForChar(message_buffer[msg_index]);
+        else
+            segment_data = 0x00;
+    }
+    else if (night_mode_active)
+    {
+        if (local_cnt == 0)
+            segment_data = seg7[hh / 10];
+        else if (local_cnt == 1)
+            segment_data = seg7[hh % 10] | 0x80;
+        else if (local_cnt == 2)
+            segment_data = seg7[mm / 10];
+        else if (local_cnt == 3)
+            segment_data = seg7[mm % 10];
+        else
+            segment_data = 0x00;
+    }
+    else if (current_mode == MODE_FLOWING) // 流动显示模式
     {
         display_cnt = display_reversed_order ? (uint8_t)(7 - local_cnt) : local_cnt;
 
@@ -252,7 +606,7 @@ void Update7SegmentDisplay(void)
 
     result = I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT1, effective_segment_data); // 发送段码
     result = I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT2, rightshift);             // 发送位选
-    result = I2C0_WriteByte(PCA9557_I2CADDR, PCA9557_OUTPUT, ~rightshift);                  // 外部LED的位选（与数码管位选互补）
+    Display_UpdateStatusLeds();
 
     cnt++;                        // 切换到下一个数码管
     rightshift = rightshift << 1; // 移位位选
@@ -268,6 +622,31 @@ void Update7SegmentDisplay(void)
 // 更新显示移位效果
 void UpdateDisplayShift(void)
 {
+    if (message_active)
+    {
+        if (message_scroll_active)
+        {
+            if ((g_system_tick - message_last_shift_tick) >= V_T300ms)
+            {
+                message_last_shift_tick = g_system_tick;
+                message_shift++;
+                if (message_shift > (int8_t)message_len)
+                {
+                    Display_StopMessage();
+                }
+                else
+                {
+                    Display_SendEvent();
+                }
+            }
+        }
+        else if ((g_system_tick - message_start_tick) >= MESSAGE_STATIC_MS)
+        {
+            Display_StopMessage();
+        }
+        return;
+    }
+
     if (shift_mode == false) // 左移模式
     {
         shift++;     // 移位量增加
@@ -357,6 +736,10 @@ void UpdateTimeAndDisplayBuffers(void)
     storedRTC[2] = (uint32_t)ss;
     storedRTC[3] = HibernateRTCGet(); // 存储当前RTC计数值
     HibernateDataSet(storedRTC, 4);   // 保存数据
+    if (!message_active)
+    {
+        Display_SendEvent();
+    }
 }
 
 // 将字符转换为大写

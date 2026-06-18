@@ -73,7 +73,8 @@ void App_RunOnce(void)
             clock2ms_flag = false;
         }
 
-        if (current_mode == MODE_FLOWING && shifting == true && seven_segment_display_on == true)
+        if (message_active ||
+            (current_mode == MODE_FLOWING && shifting == true && seven_segment_display_on == true))
         {
             if (shift_speed == false && clock500ms_flag)
             {
@@ -86,6 +87,7 @@ void App_RunOnce(void)
                 clock300ms_flag = false;
             }
         }
+        Display_UpdateStatusLeds();
     }
     ProcessUartCommand();
 }

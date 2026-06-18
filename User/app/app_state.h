@@ -120,6 +120,7 @@ extern volatile uint32_t user_key_debounce_timer[2];
 extern volatile uint32_t user_key_press_start_time[2];
 extern volatile bool user_key_states[2];
 extern volatile bool user_key_short_press_event[2];
+extern volatile bool user_key_gpio_ready;
 
 extern system_mode_t current_mode;
 extern setting_field_t current_setting_field;

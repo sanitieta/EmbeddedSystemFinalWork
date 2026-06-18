@@ -205,34 +205,37 @@ void SysTick_Handler(void)
         }
     }
 
-    current_user_raw_value = GPIOPinRead(GPIO_PORTJ_BASE, GPIO_PIN_0 | GPIO_PIN_1);
-    for (i = 0; i < 2; ++i)
+    if (user_key_gpio_ready)
     {
-        current_user_pin = (i == 0) ? GPIO_PIN_0 : GPIO_PIN_1;
-        if ((current_user_raw_value & current_user_pin) == 0)
+        current_user_raw_value = GPIOPinRead(GPIO_PORTJ_BASE, GPIO_PIN_0 | GPIO_PIN_1);
+        for (i = 0; i < 2; ++i)
         {
-            if (user_key_debounce_timer[i] < DEBOUNCE_TIME_MS)
-                user_key_debounce_timer[i]++;
-
-            if (user_key_debounce_timer[i] == DEBOUNCE_TIME_MS && user_key_states[i] == false)
+            current_user_pin = (i == 0) ? GPIO_PIN_0 : GPIO_PIN_1;
+            if ((current_user_raw_value & current_user_pin) == 0)
             {
-                user_key_states[i] = true;
-                user_key_press_start_time[i] = g_system_tick;
-            }
-        }
-        else
-        {
-            if (user_key_debounce_timer[i] > 0)
-                user_key_debounce_timer[i]--;
+                if (user_key_debounce_timer[i] < DEBOUNCE_TIME_MS)
+                    user_key_debounce_timer[i]++;
 
-            if (user_key_debounce_timer[i] == 0 && user_key_states[i] == true)
-            {
-                user_key_states[i] = false;
-                if (g_system_tick - user_key_press_start_time[i] >= DEBOUNCE_TIME_MS)
+                if (user_key_debounce_timer[i] == DEBOUNCE_TIME_MS && user_key_states[i] == false)
                 {
-                    user_key_short_press_event[i] = true;
+                    user_key_states[i] = true;
+                    user_key_press_start_time[i] = g_system_tick;
                 }
-                user_key_press_start_time[i] = 0;
+            }
+            else
+            {
+                if (user_key_debounce_timer[i] > 0)
+                    user_key_debounce_timer[i]--;
+
+                if (user_key_debounce_timer[i] == 0 && user_key_states[i] == true)
+                {
+                    user_key_states[i] = false;
+                    if (g_system_tick - user_key_press_start_time[i] >= DEBOUNCE_TIME_MS)
+                    {
+                        user_key_short_press_event[i] = true;
+                    }
+                    user_key_press_start_time[i] = 0;
+                }
             }
         }
     }

@@ -123,6 +123,7 @@ volatile uint32_t user_key_debounce_timer[2];   // USER1/USER2去抖定时器
 volatile uint32_t user_key_press_start_time[2]; // USER1/USER2按下起始时间
 volatile bool user_key_states[2];               // USER1/USER2当前状态
 volatile bool user_key_short_press_event[2];    // USER1/USER2短按事件
+volatile bool user_key_gpio_ready = false;      // USER1/USER2 GPIO是否已初始化
 
 system_mode_t current_mode = MODE_FLOWING;          // 当前系统模式
 setting_field_t current_setting_field = FIELD_NONE; // 当前设置字段

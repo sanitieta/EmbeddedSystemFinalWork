@@ -27,6 +27,7 @@
 #include "datetime.h"
 #include "boot_sequence.h"
 #include "display.h"
+#include "melody.h"
 
 static const uint8_t kStudentIdFirst[8] = {0x6D, 0x5B, 0x66, 0x3F, 0x4F, 0x06, 0x6F, 0x06};  // 52403191
 static const uint8_t kStudentIdSecond[8] = {0x4F, 0x06, 0x6F, 0x06, 0x3F, 0x07, 0x07, 0x5B}; // 31910772
@@ -100,6 +101,7 @@ static void FinishBootSequence(void)
     g.disp.shifting = true;
     g.disp.main_disp = MAIN_DISPLAY_TIME;
     UpdateTimeAndDisplayBuffers();
+    Melody_Start();  // 开机旋律: See You Again
 }
 
 static void OutputBootFrame(const uint8_t frame[8], uint8_t led_pattern)

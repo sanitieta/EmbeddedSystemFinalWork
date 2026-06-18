@@ -38,6 +38,7 @@ add_executable(${PROJECT_NAME}
     User/app/command.c
     User/app/datetime.c
     User/app/display.c
+    User/app/melody.c
     RTE/Device/TM4C1294NCPDT/system_TM4C129.c
     RTE/Device/TM4C1294NCPDT/startup_TM4C129.s
 )

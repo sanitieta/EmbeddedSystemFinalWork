@@ -22,6 +22,18 @@
 #include "app_state.h"
 #include "pwm_buzzer.h"
 
+static void PwmPinToGpioLow(void)
+{
+    GPIOPinTypeGPIOOutput(GPIO_PORTK_BASE, GPIO_PIN_5);
+    GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_5, 0);  /* 拉低, 蜂鸣器彻底静音 */
+}
+
+static void PwmPinRestore(void)
+{
+    GPIOPinConfigure(GPIO_PK5_M0PWM7);
+    GPIOPinTypePWM(GPIO_PORTK_BASE, GPIO_PIN_5);
+}
+
 // 初始化PWM模块
 void PWMInit(void)
 {
@@ -43,11 +55,11 @@ void PWMInit(void)
 }
 
 // 启动PWM输出，设置指定频率
-
-// 启动PWM输出，设置指定频率
 void PWMStart(uint32_t ui32Freq_Hz)
 {
     PWMGenDisable(PWM0_BASE, PWM_GEN_3); // 先禁用PWM发生器
+
+    PwmPinRestore(); // 恢复 PK5 为 PWM 功能 (PWMStop 可能已切为 GPIO)
 
     // 设置PWM周期，决定频率
     PWMGenPeriodSet(PWM0_BASE, PWM_GEN_3, g.sys_clock_hz / ui32Freq_Hz);
@@ -63,7 +75,6 @@ void PWMStart(uint32_t ui32Freq_Hz)
 void PWMStop(void)
 {
     PWMGenDisable(PWM0_BASE, PWM_GEN_3); // 禁用PWM发生器3
+    PwmPinToGpioLow();                   // 切为 GPIO 并拉低, 消除丝丝声
     g.disp.alarm_ringing = false;
 }
-
-// 简单的软件延时

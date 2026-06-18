@@ -499,6 +499,11 @@
               <FileType>1</FileType>
               <FilePath>.\User\app\display.c</FilePath>
             </File>
+            <File>
+              <FileName>melody.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\app\melody.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

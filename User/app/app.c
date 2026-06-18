@@ -9,6 +9,7 @@
 #include "button_logic.h"
 #include "display.h"
 #include "command.h"
+#include "melody.h"
 #include "uart_port.h"
 
 void App_Init(void)
@@ -45,6 +46,7 @@ void App_Init(void)
 
 void App_RunOnce(void)
 {
+    Melody_Update();  // 旋律播放器 (非阻塞, 不播放时立即返回)
     HandleAlarm();
 
     if (g.disp.init_flag)

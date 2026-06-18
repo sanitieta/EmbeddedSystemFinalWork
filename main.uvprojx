@@ -326,7 +326,7 @@
             <wLevel>2</wLevel>
             <uThumb>0</uThumb>
             <uSurpInc>0</uSurpInc>
-            <uC99>0</uC99>
+            <uC99>1</uC99>
             <uGnu>0</uGnu>
             <useXO>0</useXO>
             <v6Lang>1</v6Lang>
@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>PART_TM4C1294NCPDT</Define>
               <Undefine></Undefine>
-              <IncludePath>.\inc;.\driverlib</IncludePath>
+              <IncludePath>.\inc;.\driverlib;.;.\User\base;.\User\app</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -402,6 +402,106 @@
           </Files>
         </Group>
         <Group>
+          <GroupName>User</GroupName>
+          <Files>
+            <File>
+              <FileName>callback.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\callback.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>User/base</GroupName>
+          <Files>
+            <File>
+              <FileName>board.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\base\board.c</FilePath>
+            </File>
+            <File>
+              <FileName>delay.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\base\delay.c</FilePath>
+            </File>
+            <File>
+              <FileName>hibernate_rtc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\base\hibernate_rtc.c</FilePath>
+            </File>
+            <File>
+              <FileName>i2c_bus.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\base\i2c_bus.c</FilePath>
+            </File>
+            <File>
+              <FileName>pwm_buzzer.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\base\pwm_buzzer.c</FilePath>
+            </File>
+            <File>
+              <FileName>stepper.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\base\stepper.c</FilePath>
+            </File>
+            <File>
+              <FileName>timebase.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\base\timebase.c</FilePath>
+            </File>
+            <File>
+              <FileName>uart_port.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\base\uart_port.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>User/app</GroupName>
+          <Files>
+            <File>
+              <FileName>alarm.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\app\alarm.c</FilePath>
+            </File>
+            <File>
+              <FileName>app.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\app\app.c</FilePath>
+            </File>
+            <File>
+              <FileName>app_state.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\app\app_state.c</FilePath>
+            </File>
+            <File>
+              <FileName>boot_sequence.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\app\boot_sequence.c</FilePath>
+            </File>
+            <File>
+              <FileName>button_logic.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\app\button_logic.c</FilePath>
+            </File>
+            <File>
+              <FileName>command.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\app\command.c</FilePath>
+            </File>
+            <File>
+              <FileName>datetime.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\app\datetime.c</FilePath>
+            </File>
+            <File>
+              <FileName>display.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\app\display.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
           <GroupName>::CMSIS</GroupName>
         </Group>
         <Group>
@@ -412,6 +512,21 @@
   </Targets>
 
   <RTE>
+    <packages>
+      <filter>
+        <targetInfos/>
+      </filter>
+      <package name="CMSIS" vendor="ARM" version="5.9.0">
+        <targetInfos>
+          <targetInfo name="Target 1" versionMatchMode="fixed"/>
+        </targetInfos>
+      </package>
+      <package name="TM4C_DFP" vendor="Keil" version="1.1.0">
+        <targetInfos>
+          <targetInfo name="Target 1" versionMatchMode="fixed"/>
+        </targetInfos>
+      </package>
+    </packages>
     <apis/>
     <components>
       <component Cclass="CMSIS" Cgroup="CORE" Cvendor="ARM" Cversion="5.6.0" condition="ARMv6_7_8-M Device">

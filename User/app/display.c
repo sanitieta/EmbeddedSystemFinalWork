@@ -260,7 +260,6 @@ void Display_UpdateStatusLeds(void)
             UARTCharPutBlocking(UART0_BASE, HexDigit((uint8_t)(pattern >> 4)));
             UARTCharPutBlocking(UART0_BASE, HexDigit(pattern));
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
-            g.disp.uart_activity_until = g.timer.tick + UART_ACTIVITY_FLASH_MS;
         }
         return;
     }
@@ -305,7 +304,6 @@ void Display_UpdateStatusLeds(void)
         UARTCharPutBlocking(UART0_BASE, HexDigit((uint8_t)(pattern >> 4)));
         UARTCharPutBlocking(UART0_BASE, HexDigit(pattern));
         UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
-        g.disp.uart_activity_until = g.timer.tick + UART_ACTIVITY_FLASH_MS;
     }
 }
 
@@ -370,7 +368,6 @@ void Display_SendLedEvent(void)
     UARTCharPutBlocking(UART0_BASE, HexDigit((uint8_t)(pattern >> 4)));
     UARTCharPutBlocking(UART0_BASE, HexDigit(pattern));
     UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
-    g.disp.uart_activity_until = g.timer.tick + UART_ACTIVITY_FLASH_MS;
     g.disp.last_sent_led = pattern;
 }
 
@@ -784,5 +781,3 @@ void UpdateTimeAndDisplayBuffers(void)
         Display_SendLedEvent();
     }
 }
-
-// 将字符转换为大写

@@ -39,6 +39,19 @@ static uint8_t toUpper(uint8_t c)
     return c;
 }
 
+// 统计命令字符串中必输字符数 ('*' 和大写字母)
+static uint8_t CountMandatory(const char *str)
+{
+    uint8_t count = 0;
+    while (*str)
+    {
+        if (*str == '*' || (*str >= 'A' && *str <= 'Z'))
+            count++;
+        str++;
+    }
+    return count;
+}
+
 static int8_t HexValue(uint8_t c)
 {
     if (c >= '0' && c <= '9')
@@ -232,9 +245,7 @@ static bool matchCommand(const command_token_t *t0, const command_token_t *t1, u
     bool has_colon_in_full_str = false;
     uint8_t literal_len_full_str;
     const char *prefix_str_literal;
-    uint8_t prefix_len_literal;
     const char *suffix_str_literal;
-    uint8_t suffix_len_literal;
 
     literal_len_full_str = 0;
     while (cmd_full_str[literal_len_full_str] != '\0')
@@ -255,18 +266,16 @@ static bool matchCommand(const command_token_t *t0, const command_token_t *t1, u
 
     if (!has_colon_in_full_str) // 如果命令字符串不包含冒号 (如 "*RST")
     {
-        // 直接比较第一个Token与完整命令字符串
-        return (num_tokens_total >= 1) && compareTokens(t0, cmd_full_str, literal_len_full_str);
+        // 直接比较第一个Token与完整命令字符串 (支持缩写)
+        return (num_tokens_total >= 1) && compareTokens(t0, cmd_full_str, CountMandatory(cmd_full_str));
     }
 
     // 如果命令字符串包含冒号 (如 "*SET:DATE")
     prefix_str_literal = cmd_full_str; // 冒号前的部分
-    prefix_len_literal = colon_idx;
     suffix_str_literal = cmd_full_str + colon_idx + 1; // 冒号后的部分
-    suffix_len_literal = literal_len_full_str - (colon_idx + 1);
 
-    // 首先尝试匹配整个命令作为一个Token (如 "*SET:DATE")
-    if (compareTokens(t0, cmd_full_str, literal_len_full_str))
+    // 首先尝试匹配整个命令作为一个Token (如 "*SET:DATE", 支持缩写)
+    if (compareTokens(t0, cmd_full_str, CountMandatory(cmd_full_str)))
     {
         return true;
     }
@@ -274,20 +283,20 @@ static bool matchCommand(const command_token_t *t0, const command_token_t *t1, u
     // 如果不匹配整个命令，则尝试匹配为两个Token (如 "*SET" 和 ":DATE" 或 "DATE")
     if (num_tokens_total >= 2 && t1 != NULL)
     {
-        // 比较第一个Token与前缀部分
-        if (!compareTokens(t0, prefix_str_literal, prefix_len_literal))
+        // 比较第一个Token与前缀部分 (支持缩写)
+        if (!compareTokens(t0, cmd_full_str, CountMandatory(prefix_str_literal) + 1U /* colon */))
         {
             return false;
         }
 
-        // 比较第二个Token与后缀部分
+        // 比较第二个Token与后缀部分 (支持缩写)
         if (t1->token_len > 0 && t1->token_str[0] == ':') // 如果第二个Token以冒号开头 (如 ":DATE")
         {
-            return compareTokens_modified_for_colon_prefix(t1->token_str + 1, t1->token_len - 1, suffix_str_literal, suffix_len_literal);
+            return compareTokens_modified_for_colon_prefix(t1->token_str + 1, t1->token_len - 1, suffix_str_literal, CountMandatory(suffix_str_literal));
         }
         else // 如果第二个Token不以冒号开头 (如 "DATE")
         {
-            return compareTokens(t1, suffix_str_literal, suffix_len_literal);
+            return compareTokens(t1, suffix_str_literal, CountMandatory(suffix_str_literal));
         }
     }
 
@@ -413,7 +422,7 @@ void ProcessUartCommand(void)
 
         // 匹配 "YEAR MONTH DATE YYYY MM DD" 格式
         if (g.uart.num_tokens == field_token_idx + 6 &&
-            compareFieldKeyword(&g.uart.tokens[field_token_idx], "YEAR", 4) &&
+            compareFieldKeyword(&g.uart.tokens[field_token_idx], "YEAR", 3) &&
             compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "MONTH", 5) &&
             compareFieldKeyword(&g.uart.tokens[field_token_idx + 2], "DATE", 3))
         {
@@ -432,7 +441,7 @@ void ProcessUartCommand(void)
 
         // 匹配 "YEAR MONTH YYYY MM" 格式
         else if (g.uart.num_tokens == field_token_idx + 4 &&
-                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "YEAR", 4) &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "YEAR", 3) &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "MONTH", 5))
         {
             val_token_idx = field_token_idx + 2;
@@ -452,7 +461,7 @@ void ProcessUartCommand(void)
 
         // 匹配 "YEAR DATE YYYY DD" 格式
         else if (g.uart.num_tokens == field_token_idx + 4 &&
-                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "YEAR", 4) &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "YEAR", 3) &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "DATE", 3))
         {
             val_token_idx = field_token_idx + 2;
@@ -468,7 +477,7 @@ void ProcessUartCommand(void)
 
         // 匹配 "MONTH DATE MM DD" 格式
         else if (g.uart.num_tokens == field_token_idx + 4 &&
-                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "MONTH", 5) &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "MONTH", 3) &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "DATE", 3))
         {
             val_token_idx = field_token_idx + 2;
@@ -484,7 +493,7 @@ void ProcessUartCommand(void)
 
         // 匹配 "YEAR YYYY" 格式
         else if (g.uart.num_tokens == field_token_idx + 2 &&
-                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "YEAR", 4))
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "YEAR", 3))
         {
             val_token_idx = field_token_idx + 1;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 年
@@ -504,7 +513,7 @@ void ProcessUartCommand(void)
 
         // 匹配 "MONTH MM" 格式
         else if (g.uart.num_tokens == field_token_idx + 2 &&
-                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "MONTH", 5))
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "MONTH", 3))
         {
             val_token_idx = field_token_idx + 1;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 月
@@ -566,7 +575,7 @@ void ProcessUartCommand(void)
 
         // 匹配 "HOUR MINUTE SECOND HH MM SS" 格式
         if (g.uart.num_tokens == field_token_idx + 6 &&
-            compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 4) &&
+            compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 3) &&
             compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "MINUTE", 3) &&
             compareFieldKeyword(&g.uart.tokens[field_token_idx + 2], "SECOND", 3))
         {
@@ -585,7 +594,7 @@ void ProcessUartCommand(void)
 
         // 匹配 "HOUR MINUTE HH MM" 格式
         else if (g.uart.num_tokens == field_token_idx + 4 &&
-                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 4) &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 3) &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "MINUTE", 3))
         {
             val_token_idx = field_token_idx + 2;
@@ -601,7 +610,7 @@ void ProcessUartCommand(void)
 
         // 匹配 "HOUR SECOND HH SS" 格式
         else if (g.uart.num_tokens == field_token_idx + 4 &&
-                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 4) &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 3) &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "SECOND", 3))
         {
             val_token_idx = field_token_idx + 2;
@@ -633,7 +642,7 @@ void ProcessUartCommand(void)
 
         // 匹配 "HOUR HH" 格式
         else if (g.uart.num_tokens == field_token_idx + 2 &&
-                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 4))
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 3))
         {
             val_token_idx = field_token_idx + 1;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 时
@@ -698,7 +707,7 @@ void ProcessUartCommand(void)
 
         // 匹配 "HOUR MINUTE SECOND HH MM SS" 格式
         if (g.uart.num_tokens == field_token_idx + 6 &&
-            compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 4) &&
+            compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 3) &&
             compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "MINUTE", 3) &&
             compareFieldKeyword(&g.uart.tokens[field_token_idx + 2], "SECOND", 3))
         {
@@ -717,7 +726,7 @@ void ProcessUartCommand(void)
 
         // 匹配 "HOUR MINUTE HH MM" 格式
         else if (g.uart.num_tokens == field_token_idx + 4 &&
-                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 4) &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 3) &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "MINUTE", 3))
         {
             val_token_idx = field_token_idx + 2;
@@ -733,7 +742,7 @@ void ProcessUartCommand(void)
 
         // 匹配 "HOUR SECOND HH SS" 格式
         else if (g.uart.num_tokens == field_token_idx + 4 &&
-                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 4) &&
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 3) &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "SECOND", 3))
         {
             val_token_idx = field_token_idx + 2;
@@ -765,7 +774,7 @@ void ProcessUartCommand(void)
 
         // 匹配 "HOUR HH" 格式
         else if (g.uart.num_tokens == field_token_idx + 2 &&
-                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 4))
+                 compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 3))
         {
             val_token_idx = field_token_idx + 1;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 时
@@ -1005,7 +1014,7 @@ void ProcessUartCommand(void)
         {
             for (i = field_token_idx; i < g.uart.num_tokens; ++i)
             {
-                if (compareFieldKeyword(&g.uart.tokens[i], "YEAR", 4)) // "YEAR"
+                if (compareFieldKeyword(&g.uart.tokens[i], "YEAR", 3)) // "YEAR"
                 {
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)((g.clock.year / 1000) % 10) + '0');
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)((g.clock.year / 100) % 10) + '0');
@@ -1013,7 +1022,7 @@ void ProcessUartCommand(void)
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.year % 10) + '0');
                     found_arg = true;
                 }
-                else if (compareFieldKeyword(&g.uart.tokens[i], "MONTH", 5)) // "MONTH"
+                else if (compareFieldKeyword(&g.uart.tokens[i], "MONTH", 3)) // "MONTH"
                 {
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.month / 10) + '0');
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.month % 10) + '0');
@@ -1051,7 +1060,7 @@ void ProcessUartCommand(void)
         {
             for (i = field_token_idx; i < g.uart.num_tokens; ++i)
             {
-                if (compareFieldKeyword(&g.uart.tokens[i], "HOUR", 4)) // "HOUR"
+                if (compareFieldKeyword(&g.uart.tokens[i], "HOUR", 3)) // "HOUR"
                 {
                     
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.hh / 10) + '0');

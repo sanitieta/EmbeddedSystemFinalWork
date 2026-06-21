@@ -115,6 +115,8 @@ typedef struct {
     bool     night_mode;      // 夜间模式激活 (仅显示 HH.MM，静音，关LED)
     bool     led_takeover;    // LED 上位机接管模式
     uint8_t  led_pattern;     // LED 接管时的强制输出模式 (hex2)
+    uint8_t  current_led;     // 当前实际输出的 LED 状态 (用于变化检测)
+    uint8_t  last_sent_led;   // 上次通过 *EVT:LED 上报的 LED 状态
     volatile uint32_t uart_activity_until; // UART 活动指示 LED 截止 tick (100ms 闪烁)
 
     /* 闹钟运行时状态 */

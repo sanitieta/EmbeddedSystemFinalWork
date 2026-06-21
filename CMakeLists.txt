@@ -20,7 +20,7 @@ include_directories(
 )
 
 add_executable(${PROJECT_NAME}
-    main.c
+    User/main.c
     User/callback.c
     User/base/board.c
     User/base/delay.c

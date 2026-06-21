@@ -1272,11 +1272,60 @@ void ProcessUartCommand(void)
                                                            "*MOTOR :STOP                               : Stop stepper motor.\r\n"
                                                            "*MOTOR :FWD                                : Set stepper motor forward.\r\n"
                                                            "*MOTOR :REV                                : Set stepper motor reverse.\r\n"
-                                                           "*GET :MOTOR                                : Get stepper motor status.\r\n");
+                                                           "*GET :MOTOR                                : Get stepper motor status.\r\n"
+                                                           "PING                                       : Respond with *PONG <uptime_s>.\r\n");
         }
         else // 命令格式错误
         {
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: HELP\r\n");
+        }
+    }
+    // 处理 "PING" 命令 (连接保活)
+    else if (compareTokens(&g.uart.tokens[0], "PING", 4))
+    {
+        if (g.uart.num_tokens == current_param_idx)
+        {
+            char pong_buf[24];
+            uint32_t uptime_s = g.timer.tick / 1000U;
+            uint8_t len = 0;
+            uint8_t i;
+
+            /* 手动构建 "*PONG <uptime_s>\r\n" 避免依赖 sprintf */
+            pong_buf[0] = '*'; pong_buf[1] = 'P'; pong_buf[2] = 'O'; pong_buf[3] = 'N';
+            pong_buf[4] = 'G'; pong_buf[5] = ' ';
+            len = 6;
+
+            /* 将 uptime_s 转为 ASCII (简易 itoa) */
+            {
+                char num_buf[12];
+                uint8_t num_len = 0;
+                uint32_t val = uptime_s;
+                if (val == 0)
+                {
+                    num_buf[num_len++] = '0';
+                }
+                else
+                {
+                    while (val > 0 && num_len < 11)
+                    {
+                        num_buf[num_len++] = (char)('0' + (val % 10U));
+                        val /= 10U;
+                    }
+                }
+                /* 逆序写入 */
+                for (i = num_len; i > 0; --i)
+                    pong_buf[len++] = num_buf[i - 1U];
+            }
+
+            pong_buf[len++] = '\r';
+            pong_buf[len++] = '\n';
+            pong_buf[len] = '\0';
+
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)pong_buf);
+        }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: PING\r\n");
         }
     }
     else // 未知命令

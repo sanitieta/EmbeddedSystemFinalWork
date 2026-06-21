@@ -185,6 +185,7 @@ typedef struct {
     volatile uint32_t user_press_start[2]; // USER 按键按下起始时刻
     volatile bool     user_state[2];       // USER 按键当前稳定状态
     volatile bool     user_short_evt[2];   // USER 按键短按事件标志
+    volatile bool     suppress_key_events;  // *SET:KEY 虚拟注入时抑制 *EVT:KEY 回显
     volatile bool     user_gpio_ready;     // USER 按键 GPIO 是否已初始化
 } input_state_t;
 

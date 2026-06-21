@@ -72,16 +72,23 @@ void ProcessButtonEvents(void)
 
     if (g.in.user_short_evt[0])
     {
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:KEY USER1\r\n");
-        g.disp.uart_activity_until = g.timer.tick + UART_ACTIVITY_FLASH_MS;
+        if (!g.in.suppress_key_events)
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:KEY USER1\r\n");
+            g.disp.uart_activity_until = g.timer.tick + UART_ACTIVITY_FLASH_MS;
+        }
         g.in.user_short_evt[0] = false;
     }
     if (g.in.user_short_evt[1])
     {
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:KEY USER2\r\n");
-        g.disp.uart_activity_until = g.timer.tick + UART_ACTIVITY_FLASH_MS;
+        if (!g.in.suppress_key_events)
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:KEY USER2\r\n");
+            g.disp.uart_activity_until = g.timer.tick + UART_ACTIVITY_FLASH_MS;
+        }
         g.in.user_short_evt[1] = false;
     }
+    g.in.suppress_key_events = false;
 }
 
 static void EnterNextEditMode(void)
@@ -409,7 +416,11 @@ static void HandleButtonShortPress(uint8_t button_num)
         ToggleDisplayFormat();
         return;
     case 8: // K8 EXT
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:KEY EXT\r\n");
+        if (!g.in.suppress_key_events)
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:KEY EXT\r\n");
+            g.disp.uart_activity_until = g.timer.tick + UART_ACTIVITY_FLASH_MS;
+        }
         return;
     default:
         return;

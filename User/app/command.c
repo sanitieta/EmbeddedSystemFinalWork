@@ -964,6 +964,32 @@ void ProcessUartCommand(void)
         }
     }
 
+    // 处理 "*SET:KEY" 命令 (虚拟按键注入, 不回报 *EVT:KEY 避免环回)
+    else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*SET:KEY"))
+    {
+        if (g.uart.num_tokens == current_param_idx + 1)
+        {
+            if (compareTokens(&g.uart.tokens[current_param_idx], "USER1", 5))
+            {
+                g.in.suppress_key_events = true;
+                g.in.user_short_evt[0] = true;
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
+            }
+            else if (compareTokens(&g.uart.tokens[current_param_idx], "USER2", 5))
+            {
+                g.in.suppress_key_events = true;
+                g.in.user_short_evt[1] = true;
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
+            }
+            else if (compareTokens(&g.uart.tokens[current_param_idx], "EXT", 3))
+            {
+                g.in.suppress_key_events = true;
+                g.in.short_evt[7] = true;          // K8
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
+            }
+        }
+    }
+
     // 处理 "*GET:DATE" 命令 (获取日期信息)
     else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*GET:DATE"))
     {

@@ -387,7 +387,7 @@
             <File>
               <FileName>main.c</FileName>
               <FileType>1</FileType>
-              <FilePath>.\main.c</FilePath>
+              <FilePath>.\User\main.c</FilePath>
             </File>
           </Files>
         </Group>

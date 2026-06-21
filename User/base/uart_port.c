@@ -48,8 +48,6 @@ void UARTInit(void)
 }
 
 // 非阻塞方式发送字符串
-
-// 非阻塞方式发送字符串
 void UARTStringPutNOBlocking(uint32_t ui32Base, uint8_t *cMessage)
 {
     bool TXFIFO_free;

@@ -249,7 +249,19 @@ void Display_UpdateStatusLeds(void)
 
     if (g.disp.led_takeover)
     {
-        Display_SetLedOutput(g.disp.led_pattern);
+        pattern = g.disp.led_pattern;
+        g.disp.current_led = pattern;
+        Display_SetLedOutput(pattern);
+        /* LED takeover 变化检测 */
+        if (pattern != g.disp.last_sent_led)
+        {
+            g.disp.last_sent_led = pattern;
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:LED ");
+            UARTCharPutBlocking(UART0_BASE, HexDigit((uint8_t)(pattern >> 4)));
+            UARTCharPutBlocking(UART0_BASE, HexDigit(pattern));
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
+            g.disp.uart_activity_until = g.timer.tick + UART_ACTIVITY_FLASH_MS;
+        }
         return;
     }
 
@@ -282,7 +294,19 @@ void Display_UpdateStatusLeds(void)
         }
     }
 
+    g.disp.current_led = pattern;
     Display_SetLedOutput(pattern);
+
+    /* LED 状态变化时立即上报 *EVT:LED (心跳在 UpdateTimeAndDisplayBuffers 中每秒发送) */
+    if (pattern != g.disp.last_sent_led)
+    {
+        g.disp.last_sent_led = pattern;
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:LED ");
+        UARTCharPutBlocking(UART0_BASE, HexDigit((uint8_t)(pattern >> 4)));
+        UARTCharPutBlocking(UART0_BASE, HexDigit(pattern));
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
+        g.disp.uart_activity_until = g.timer.tick + UART_ACTIVITY_FLASH_MS;
+    }
 }
 
 void Display_FormatBufferForProtocol(const uint8_t *src, uint8_t len, uint8_t *dst)
@@ -330,6 +354,24 @@ void Display_SendEvent(void)
     UARTCharPutBlocking(UART0_BASE, HexDigit(out_dp_hex));
     UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
     g.disp.uart_activity_until = g.timer.tick + UART_ACTIVITY_FLASH_MS;
+}
+
+void Display_SendLedEvent(void)
+{
+    uint8_t pattern;
+
+    /* 读取当前 LED 输出值 — 优先 takeover 模式，否则用最后一次计算的状态 */
+    if (g.disp.led_takeover)
+        pattern = g.disp.led_pattern;
+    else
+        pattern = g.disp.current_led;
+
+    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:LED ");
+    UARTCharPutBlocking(UART0_BASE, HexDigit((uint8_t)(pattern >> 4)));
+    UARTCharPutBlocking(UART0_BASE, HexDigit(pattern));
+    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
+    g.disp.uart_activity_until = g.timer.tick + UART_ACTIVITY_FLASH_MS;
+    g.disp.last_sent_led = pattern;
 }
 
 void Display_StartMessage(const uint8_t *text, uint8_t len)
@@ -739,6 +781,7 @@ void UpdateTimeAndDisplayBuffers(void)
     if (!g.disp.msg_active)
     {
         Display_SendEvent();
+        Display_SendLedEvent();
     }
 }
 

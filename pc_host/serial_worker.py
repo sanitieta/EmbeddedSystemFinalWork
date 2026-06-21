@@ -23,6 +23,7 @@ class SerialWorker(QThread):
     connection_changed = pyqtSignal(bool)  # True=已连接, False=已断开
     latency_updated = pyqtSignal(int)      # 往返延迟 (ms)
     port_list_updated = pyqtSignal(list)   # COM 口列表更新
+    port_error = pyqtSignal(str)           # 端口错误消息
 
     def __init__(self):
         super().__init__()
@@ -44,6 +45,13 @@ class SerialWorker(QThread):
         # 常量
         self.PING_INTERVAL_S = 1.0
         self.PONG_TIMEOUT_S = 3.0
+        self.CONNECT_GRACE_PERIOD_S = 5.0
+
+        self._connect_time: float = 0.0
+        self._any_data_received: bool = False
+
+        # 最后一次连接错误 (供 UI 查询)
+        self.last_port_error: str = ""
 
     # ---- Public API (called from main thread) ----
 
@@ -72,13 +80,21 @@ class SerialWorker(QThread):
                 timeout=0.1,  # 非阻塞读取
                 write_timeout=0.1,
             )
+            # 清空缓冲区中的残留数据
+            self.serial.read_all()
             self.port_name = port
             self._connected = True
+            self._connect_time = time.monotonic()
             self._last_pong_time = time.monotonic()
+            self._any_data_received = False
+            self.last_port_error = ""
+            self.port_error.emit("")
             self.connection_changed.emit(True)
             return True
         except serial.SerialException as e:
             self._connected = False
+            self.last_port_error = str(e)
+            self.port_error.emit(str(e))
             self.connection_changed.emit(False)
             return False
 
@@ -163,6 +179,7 @@ class SerialWorker(QThread):
 
     def _process_line(self, line: str):
         """处理收到的一行文本"""
+        self._any_data_received = True
         # PONG 检测
         if line.startswith("*PONG"):
             self._ping_pending = False
@@ -195,7 +212,12 @@ class SerialWorker(QThread):
                     pass
 
         # 检查 PONG 超时：仅当 PING 待回复且超时才判定断连
-        if self._connected and self._ping_pending and (now - self._last_pong_time > self.PONG_TIMEOUT_S):
+        # 连接后前 CONNECT_GRACE_PERIOD_S 秒不触发超时
+        if (self._connected and self._ping_pending
+                and (now - self._last_pong_time > self.PONG_TIMEOUT_S)
+                and (now - self._connect_time) > self.CONNECT_GRACE_PERIOD_S):
+            if not self._any_data_received:
+                self.port_error.emit("串口已打开但 MCU 无应答 — 请检查固件和波特率")
             self._connected = False
             self._ping_pending = False
             self.connection_changed.emit(False)
@@ -216,4 +238,6 @@ class SerialWorker(QThread):
         self._connected = False
         self._ping_pending = False
         self._rx_buffer = b""
+        if not self._any_data_received:
+            self.port_error.emit("串口已打开但 MCU 无应答 — 请检查固件和波特率")
         self.connection_changed.emit(False)

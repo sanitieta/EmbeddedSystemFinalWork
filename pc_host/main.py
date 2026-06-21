@@ -165,6 +165,10 @@ class MainWindow(QMainWindow):
         self.ping_label.setStyleSheet("padding: 0 8px;")
         self.status_bar.addPermanentWidget(self.ping_label)
 
+        self.last_rx_label = QLabel("最后收到: --")
+        self.last_rx_label.setStyleSheet("color: #666666; padding: 0 8px;")
+        self.status_bar.addPermanentWidget(self.last_rx_label)
+
     # ═══════════════════════════════════════════════════════════════
     # 信号连接
     # ═══════════════════════════════════════════════════════════════
@@ -177,6 +181,7 @@ class MainWindow(QMainWindow):
         sw.line_received.connect(self._on_line_received)
         sw.connection_changed.connect(self._on_connection_changed)
         sw.latency_updated.connect(self._on_latency_updated)
+        sw.port_error.connect(self._on_port_error)
 
         # ControlPanel / TwinPanel 发送命令 → 日志 + SerialWorker
         self.control_panel.send_command.connect(self._on_send_command)
@@ -199,7 +204,7 @@ class MainWindow(QMainWindow):
         ports = self.serial_worker.available_ports()
 
         if not ports:
-            self.status_bar.showMessage("未检测到可用 COM 口", 3000)
+            self.status_bar.showMessage("未检测到 COM 口 — 请检查 USB 连接", 5000)
             return
 
         self.combo_com.addItems(ports)
@@ -231,10 +236,19 @@ class MainWindow(QMainWindow):
             if not port:
                 QMessageBox.warning(self, "提示", "请先选择 COM 口")
                 return
+            self.status_bar.showMessage("正在连接 " + port + " ...", 0)
+            self.btn_connect.setEnabled(False)
             success = self.serial_worker.connect_to(port)
+            self.btn_connect.setEnabled(True)
             if not success:
+                self.status_bar.showMessage("连接 " + port + " 失败", 5000)
                 QMessageBox.warning(self, "连接失败",
                                     f"无法打开 {port}\n请检查端口是否被其他程序占用。")
+            else:
+                self.status_bar.showMessage("已连接 " + port, 3000)
+                # 立即验证 MCU 响应
+                QTimer.singleShot(300, lambda: self.serial_worker.send_line("*GET:FORMAT"))
+                QTimer.singleShot(450, lambda: self.serial_worker.send_line("*GET:ALARM"))
 
     def _on_ntp_sync(self):
         """手动触发 NTP 对时"""
@@ -322,6 +336,11 @@ class MainWindow(QMainWindow):
 
     def _on_line_received(self, line: str):
         """收到一行完整的 MCU 响应/事件"""
+        from datetime import datetime
+        now = datetime.now()
+        self.last_rx_label.setText(
+            f"最后收到: {now.strftime('%H:%M:%S')}"
+        )
         event = self.protocol.parse_event(line)
         if event:
             self.log_panel.add_rx_event(line)
@@ -451,14 +470,16 @@ class MainWindow(QMainWindow):
             self.conn_label.setText(f"● 已连接 {port}")
             self.conn_label.setStyleSheet("color: green; font-weight: bold; padding: 0 8px;")
             self.btn_connect.setText("断开")
-            # 连接后同步初始状态
-            QTimer.singleShot(500, lambda: self.serial_worker.send_line("*GET:FORMAT"))
-            QTimer.singleShot(650, lambda: self.serial_worker.send_line("*GET:ALARM"))
         else:
             self.conn_label.setText("○ 未连接")
             self.conn_label.setStyleSheet("color: gray; font-weight: bold; padding: 0 8px;")
             self.btn_connect.setText("连接")
             self.ping_label.setText("PING: --ms")
+            # 如果有端口错误，显示在状态栏和日志
+            err = self.serial_worker.last_port_error
+            if err:
+                self.status_bar.showMessage("端口错误: " + err, 8000)
+                self.log_panel.add_error("端口错误: " + err)
 
         # 启用/禁用控制面板控件
         self.control_panel.set_controls_enabled(connected)
@@ -466,6 +487,11 @@ class MainWindow(QMainWindow):
     def _on_latency_updated(self, latency_ms: int):
         """PING/PONG 往返延迟更新"""
         self.ping_label.setText(f"PING: {latency_ms}ms")
+
+    def _on_port_error(self, error_msg: str):
+        """端口错误信号处理"""
+        self.status_bar.showMessage("端口错误: " + error_msg, 8000)
+        self.log_panel.add_error("端口错误: " + error_msg)
 
     # ═══════════════════════════════════════════════════════════════
     # 窗口关闭

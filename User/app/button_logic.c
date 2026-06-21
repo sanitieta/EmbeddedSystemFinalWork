@@ -113,6 +113,7 @@ static void EnterNextEditMode(void)
         g.disp.field = FIELD_YEAR;
         g.disp.blinking = true;
         g.disp.on = true;
+        Display_SendModeEvent("DATE");
         UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"FUNC: Date edit mode.\r\n");
     }
     else if (old_mode == MODE_DATE_SET)
@@ -124,6 +125,7 @@ static void EnterNextEditMode(void)
         g.disp.field = FIELD_HOUR;
         g.disp.blinking = true;
         g.disp.on = true;
+        Display_SendModeEvent("TIME");
         UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"FUNC: Time edit mode.\r\n");
     }
     else if (old_mode == MODE_TIME_SET)
@@ -136,6 +138,7 @@ static void EnterNextEditMode(void)
         g.disp.field = FIELD_ALARM_HOUR;
         g.disp.blinking = true;
         g.disp.on = true;
+        Display_SendModeEvent("ALARM");
         UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"FUNC: Alarm edit mode.\r\n");
     }
     else if (old_mode == MODE_ALARM_SET)
@@ -147,6 +150,7 @@ static void EnterNextEditMode(void)
         g.disp.shift_mode = g.disp.prev_shift_mode;
         g.disp.shift_speed = g.disp.prev_shift_speed;
         g.disp.on = true;
+        Display_SendModeEvent("FLOWING");
         UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"FUNC: Exit edit mode.\r\n");
     }
 }
@@ -333,6 +337,7 @@ static void SaveCurrentSettingsAndExit(void)
     g.clock.original_alm_ss = g.clock.alm_ss;
 
     g.disp.mode = MODE_FLOWING;
+    Display_SendModeEvent("FLOWING");
     g.disp.field = FIELD_NONE;
     g.disp.blinking = false;
     if (restore_flow_state)
@@ -1008,6 +1013,7 @@ void HandleModeTimeout(void)
         PWMStop(); // 停止闹钟
 
         g.disp.mode = MODE_FLOWING;           // 切换回流动模式
+        Display_SendModeEvent("FLOWING");
         g.disp.field = FIELD_NONE;    // 清除设置字段
         g.disp.blinking = false;                   // 停止闪烁
         g.disp.shifting = g.disp.prev_shifting;              // 恢复之前的移位状态

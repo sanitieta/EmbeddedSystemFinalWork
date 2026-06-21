@@ -99,6 +99,7 @@ static void ResetProtocolState(void)
     g.disp.field = FIELD_NONE;
     g.disp.blinking = false;
     g.disp.main_disp = MAIN_DISPLAY_TIME;
+    Display_SendModeEvent("FLOWING");
     StopAlarmRinging(false);
     UpdateTimeAndDisplayBuffers();
     Display_UpdateStatusLeds();
@@ -949,6 +950,7 @@ void ProcessUartCommand(void)
                 PWMStop();
                 if (g.disp.alarm_ring_start != 0)
                     g.disp.alarm_ringing = true;
+                Display_SendModeEvent("NIGHT");
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:MODE NIGHT\r\n");
                 Display_SendEvent();
                 Display_UpdateStatusLeds();
@@ -956,6 +958,7 @@ void ProcessUartCommand(void)
             else if (compareTokens(&g.uart.tokens[current_param_idx], "NORMAL", 6))
             {
                 g.disp.night_mode = false;
+                Display_SendModeEvent("NORMAL");
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:MODE NORMAL\r\n");
                 Display_SendEvent();
                 Display_UpdateStatusLeds();

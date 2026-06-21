@@ -371,6 +371,15 @@ void Display_SendLedEvent(void)
     g.disp.last_sent_led = pattern;
 }
 
+void Display_SendModeEvent(const char *state)
+{
+    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:MODE ");
+    while (*state)
+        UARTCharPutBlocking(UART0_BASE, (uint8_t)(*state++));
+    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
+    g.disp.uart_activity_until = g.timer.tick + UART_ACTIVITY_FLASH_MS;
+}
+
 void Display_StartMessage(const uint8_t *text, uint8_t len)
 {
     if (len > 32)

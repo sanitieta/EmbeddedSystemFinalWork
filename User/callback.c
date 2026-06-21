@@ -20,7 +20,6 @@
 #include "driverlib/hibernate.h"
 #include "board_config.h"
 #include "app_state.h"
-#include "i2c_bus.h"
 #include "datetime.h"
 #include "stepper.h"
 #include "callback.h"
@@ -61,18 +60,15 @@ void UART0_Handler(void)
     }
 }
 
-// SysTick定时器中断处理函数
-
-// SysTick定时器中断处理函数
+// SysTick定时器中断处理函数 — 仅 tick 计数、时基 flag、时钟进位、GPIO 用户按键
+// 注意：矩阵按键 (K1-K8) 的 I2C 读取已移至主循环 PollMatrixButtons()，
+//       避免 ISR 内阻塞 I2C 操作与主循环的显示扫描 I2C 产生竞态。
 void SysTick_Handler(void)
 {
-    int i = 0;
-    uint8_t current_button_raw_value;
+    int i;
     uint8_t current_user_raw_value;
     uint8_t current_user_pin;
     uint8_t max_days_for_current_month;
-    bool any_button_is_currently_pressed_debounced = false; // 任何按钮是否处于去抖后的按下状态
-    uint32_t press_duration;                                // 按钮按下持续时间
 
     g.timer.tick++; // 增加系统滴答计数
 
@@ -142,77 +138,7 @@ void SysTick_Handler(void)
         }
     }
 
-    // 按钮状态检测和去抖
-    current_button_raw_value = I2C0_ReadByte(TCA6424_I2CADDR, TCA6424_INPUT_PORT0);
-    for (i = 0; i < 8; ++i)
-    {
-        if (!((current_button_raw_value >> i) & 0x01)) // 读到按下 (低电平有效)
-        {
-            if (g.in.debounce[i] < DEBOUNCE_TIME_MS)
-                g.in.debounce[i]++;
-
-            if (g.in.debounce[i] == DEBOUNCE_TIME_MS) // 去抖完成，确认按下
-            {
-                if (g.in.state[i] == false) // 从释放转为按下
-                {
-                    g.in.state[i] = true;
-                    g.in.press_start[i] = g.timer.tick;
-                    g.in.long_press[i] = 0;
-                    g.in.long_start_evt[i] = false;
-                    g.in.repeat_evt[i] = false;
-                }
-                else // 持续按下
-                {
-                    g.in.long_press[i]++;
-
-                    if (g.in.long_start_evt[i] == false && g.in.long_press[i] >= LONG_PRESS_TIME_MS)
-                    {
-                        g.in.long_start_evt[i] = true;
-                        if (i == 2)
-                            g.in.long_press[i] = 0;
-                    }
-                    else if (i == 2 && g.in.long_start_evt[i] == true && g.in.long_press[i] >= REPEAT_PRESS_TIME_MS)
-                    {
-                        g.in.repeat_evt[i] = true;
-                        g.in.long_press[i] = 0;
-                    }
-                }
-                any_button_is_currently_pressed_debounced = true;
-            }
-        }
-        else // 读到释放 (高电平)
-        {
-            if (g.in.debounce[i] > 0)
-                g.in.debounce[i]--;
-
-            if (g.in.debounce[i] == 0 && g.in.state[i] == true) // 去抖完成，确认释放
-            {
-                g.in.state[i] = false;
-
-                press_duration = g.timer.tick - g.in.press_start[i];
-
-                if (g.in.long_start_evt[i] == false && press_duration >= DEBOUNCE_TIME_MS && press_duration < LONG_PRESS_TIME_MS)
-                {
-                    g.in.short_evt[i] = true;
-                }
-                else if (i == 0 && g.disp.long_press_saving)
-                {
-                    g.disp.mode = MODE_FLOWING;
-                    g.disp.shifting = g.disp.prev_shifting;
-                    g.disp.shift_mode = g.disp.prev_shift_mode;
-                    g.disp.shift_speed = g.disp.prev_shift_speed;
-                    g.disp.long_press_saving = false;
-                    g.disp.on = true;
-                }
-
-                g.in.long_start_evt[i] = false;
-                g.in.repeat_evt[i] = false;
-                g.in.long_press[i] = 0;
-                g.in.press_start[i] = 0;
-            }
-        }
-    }
-
+    // GPIO 用户按键 (PJ0/PJ1) — GPIO 直读，无阻塞，可安全放在 ISR
     if (g.in.user_gpio_ready)
     {
         current_user_raw_value = GPIOPinRead(GPIO_PORTJ_BASE, GPIO_PIN_0 | GPIO_PIN_1);
@@ -244,23 +170,6 @@ void SysTick_Handler(void)
                     }
                     g.in.user_press_start[i] = 0;
                 }
-            }
-        }
-    }
-
-    // 处理模式超时 (仅在非初始化阶段)
-    if (!g.disp.init_flag)
-    {
-        if (any_button_is_currently_pressed_debounced) // 如果有按钮被按下，重置超时定时器
-        {
-            g.timer.mode_timeout = g.timer.tick;
-        }
-        else // 没有按钮被按下，检查是否超时
-        {
-            if (g.timer.tick - g.timer.mode_timeout >= MODE_TIMEOUT_MS)
-            {
-                g.timer.mode_timeout_flag = true;           // 触发模式超时
-                g.timer.mode_timeout = g.timer.tick; // 重置超时定时器
             }
         }
     }

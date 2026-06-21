@@ -55,7 +55,6 @@ void App_RunOnce(void)
     }
     else
     {
-        PollMatrixButtons();   // I2C 矩阵按键轮询 (每 ms 1 次, tick 节流)
         ProcessButtonEvents();
 
         if (g.timer.mode_timeout_flag)

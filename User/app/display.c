@@ -67,6 +67,8 @@ static uint8_t SegmentForChar(uint8_t c)
         return 0x06;
     case 'J':
         return 0x1E;
+    case 'K':
+        return 0x76; // 7段码 K 与 H/X 共用 (竖+竖+中横)
     case 'L':
         return 0x38;
     case 'N':

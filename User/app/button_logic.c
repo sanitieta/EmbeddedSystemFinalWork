@@ -114,7 +114,6 @@ static void EnterNextEditMode(void)
         g.disp.blinking = true;
         g.disp.on = true;
         Display_SendModeEvent("DATE");
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"FUNC: Date edit mode.\r\n");
     }
     else if (old_mode == MODE_DATE_SET)
     {
@@ -126,7 +125,6 @@ static void EnterNextEditMode(void)
         g.disp.blinking = true;
         g.disp.on = true;
         Display_SendModeEvent("TIME");
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"FUNC: Time edit mode.\r\n");
     }
     else if (old_mode == MODE_TIME_SET)
     {
@@ -139,7 +137,6 @@ static void EnterNextEditMode(void)
         g.disp.blinking = true;
         g.disp.on = true;
         Display_SendModeEvent("ALARM");
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"FUNC: Alarm edit mode.\r\n");
     }
     else if (old_mode == MODE_ALARM_SET)
     {
@@ -151,7 +148,6 @@ static void EnterNextEditMode(void)
         g.disp.shift_speed = g.disp.prev_shift_speed;
         g.disp.on = true;
         Display_SendModeEvent("FLOWING");
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"FUNC: Exit edit mode.\r\n");
     }
 }
 
@@ -165,7 +161,6 @@ static void CycleSettingField(void)
             g.disp.field = FIELD_DAY;
         else
             g.disp.field = FIELD_YEAR;
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SHIFT: Date field.\r\n");
     }
     else if (g.disp.mode == MODE_TIME_SET)
     {
@@ -175,7 +170,6 @@ static void CycleSettingField(void)
             g.disp.field = FIELD_SECOND;
         else
             g.disp.field = FIELD_HOUR;
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SHIFT: Time field.\r\n");
     }
     else if (g.disp.mode == MODE_ALARM_SET)
     {
@@ -185,11 +179,9 @@ static void CycleSettingField(void)
             g.disp.field = FIELD_ALARM_SECOND;
         else
             g.disp.field = FIELD_ALARM_HOUR;
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SHIFT: Alarm field.\r\n");
     }
     else
     {
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SHIFT is only valid in edit mode.\r\n");
         return;
     }
 
@@ -357,29 +349,24 @@ static void SwitchMainDisplay(void)
 {
     if (g.disp.mode != MODE_FLOWING)
     {
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"DISP is only valid in normal mode.\r\n");
         return;
     }
 
     if (g.disp.main_disp == MAIN_DISPLAY_FLOW)
     {
         g.disp.main_disp = MAIN_DISPLAY_TIME;
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"DISP: HH.MM.SS.\r\n");
     }
     else if (g.disp.main_disp == MAIN_DISPLAY_TIME)
     {
         g.disp.main_disp = MAIN_DISPLAY_DATE;
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"DISP: YY.MM.DD.\r\n");
     }
     else if (g.disp.main_disp == MAIN_DISPLAY_DATE)
     {
         g.disp.main_disp = MAIN_DISPLAY_YEAR;
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"DISP: YYYY.MMDD.\r\n");
     }
     else
     {
         g.disp.main_disp = MAIN_DISPLAY_FLOW;
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"DISP: Flow.\r\n");
     }
 }
 
@@ -387,13 +374,11 @@ static void ToggleDisplayFormat(void)
 {
     if (g.disp.mode != MODE_FLOWING)
     {
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"FORMAT is only valid in normal mode.\r\n");
         return;
     }
 
     g.disp.shift_mode = !g.disp.shift_mode;
     g.disp.reversed = g.disp.shift_mode;
-    UARTStringPutNOBlocking(UART0_BASE, g.disp.reversed ? (uint8_t *)"FORMAT: RIGHT.\r\n" : (uint8_t *)"FORMAT: LEFT.\r\n");
 }
 
 // 根据按钮编号处理短按功能
@@ -415,7 +400,6 @@ static void HandleButtonShortPress(uint8_t button_num)
         if (g.disp.alarm_ringing)
         {
             StopAlarmRinging(true);
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"FUNC: Alarm stopped.\r\n");
         }
         else
         {
@@ -429,11 +413,9 @@ static void HandleButtonShortPress(uint8_t button_num)
         if (g.disp.blinking)
         {
             HandleButtonIncrement(false);
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ADD: Field incremented.\r\n");
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ADD requires an active edit field.\r\n");
         }
         return;
     case 4: // K4 SAVE
@@ -446,11 +428,9 @@ static void HandleButtonShortPress(uint8_t button_num)
         if (g.disp.mode == MODE_FLOWING)
         {
             g.disp.shift_speed = !g.disp.shift_speed;
-            UARTStringPutNOBlocking(UART0_BASE, g.disp.shift_speed ? (uint8_t *)"SPEED: Fast.\r\n" : (uint8_t *)"SPEED: Slow.\r\n");
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SPEED is only valid in normal mode.\r\n");
         }
         return;
     case 7: // K7 FORMAT
@@ -472,22 +452,18 @@ static void HandleButtonShortPress(uint8_t button_num)
         if (g.disp.mode == MODE_FLOWING)
         {
             g.disp.shift_mode = !g.disp.shift_mode;
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Flow direction toggled.\r\n");
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Flow direction cannot be changed in setting mode.\r\n");
         }
         break;
     case 2: // 按钮2: 切换流动速度
         if (g.disp.mode == MODE_FLOWING)
         {
             g.disp.shift_speed = !g.disp.shift_speed;
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Flow speed toggled.\r\n");
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Flow speed cannot be changed in setting mode.\r\n");
         }
         break;
     case 3: // 按钮3: 暂停/恢复流动
@@ -496,16 +472,13 @@ static void HandleButtonShortPress(uint8_t button_num)
             g.disp.shifting = !g.disp.shifting;
             if (g.disp.shifting)
             {
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Flowing resumed.\r\n");
             }
             else
             {
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Flowing paused.\r\n");
             }
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Flowing cannot be paused/resumed in setting mode.\r\n");
         }
         break;
     case 4: // 按钮4: 放弃更改并恢复原始设置
@@ -536,11 +509,9 @@ static void HandleButtonShortPress(uint8_t button_num)
             g.clock.unsaved_changes_active = false;        // 清除未保存更改标志
             g.disp.long_press_saving = false; // 清除长按保存标志
             g.disp.on = true;       // 确保显示打开
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Changes abandoned, reverted to original settings.\r\n");
         }
         else if (g.disp.mode == MODE_FLOWING && g.clock.unsaved_changes_active == false)
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"No pending changes or active modes to abandon.\r\n");
         }
         break;
     case 5: // 按钮5: 临时应用更改或切换闹钟显示模式
@@ -556,7 +527,6 @@ static void HandleButtonShortPress(uint8_t button_num)
                     g.clock.year = g.clock.temp_year;
                     g.clock.month = g.clock.temp_month;
                     g.clock.day = g.clock.temp_day;
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Date temporarily applied.\r\n");
                 }
                 else
                 {
@@ -564,7 +534,6 @@ static void HandleButtonShortPress(uint8_t button_num)
                     g.clock.year = g.clock.original_year;
                     g.clock.month = g.clock.original_month;
                     g.clock.day = g.clock.original_day;
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid date, changes not applied!\r\n");
                 }
             }
             else if (g.disp.mode == MODE_TIME_SET)
@@ -574,7 +543,6 @@ static void HandleButtonShortPress(uint8_t button_num)
                     g.clock.hh = g.clock.temp_hh;
                     g.clock.mm = g.clock.temp_mm;
                     g.clock.ss = g.clock.temp_ss;
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Time temporarily applied.\r\n");
                 }
                 else
                 {
@@ -582,7 +550,6 @@ static void HandleButtonShortPress(uint8_t button_num)
                     g.clock.hh = g.clock.original_hh;
                     g.clock.mm = g.clock.original_mm;
                     g.clock.ss = g.clock.original_ss;
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid time, changes not applied!\r\n");
                 }
             }
             else if (g.disp.mode == MODE_ALARM_SET)
@@ -593,7 +560,6 @@ static void HandleButtonShortPress(uint8_t button_num)
                     g.clock.alm_mm = g.clock.temp_alm_mm;
                     g.clock.alm_ss = g.clock.temp_alm_ss;
                     PWMStop(); // 停止闹钟
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Alarm temporarily applied.\r\n");
                 }
                 else
                 {
@@ -601,7 +567,6 @@ static void HandleButtonShortPress(uint8_t button_num)
                     g.clock.alm_hh = g.clock.original_alm_hh;
                     g.clock.alm_mm = g.clock.original_alm_mm;
                     g.clock.alm_ss = g.clock.original_alm_ss;
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid alarm time, changes not applied!\r\n");
                 }
             }
             g.disp.mode = MODE_FLOWING;        // 切换回流动模式
@@ -622,7 +587,6 @@ static void HandleButtonShortPress(uint8_t button_num)
             g.disp.prev_shift_speed = g.disp.shift_speed;  // 保存当前移位速度
             g.disp.shifting = false;                // 暂停流动
             g.disp.on = true; // 确保显示打开
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Displaying alarm time.\r\n");
         }
         else if (g.disp.mode == MODE_ALARM_DISPLAY) // 如果在闹钟显示模式下
         {
@@ -632,18 +596,15 @@ static void HandleButtonShortPress(uint8_t button_num)
             g.disp.shift_mode = g.disp.prev_shift_mode;    // 恢复之前的移位方向
             g.disp.shift_speed = g.disp.prev_shift_speed;  // 恢复之前的移位速度
             g.disp.on = true; // 确保显示打开
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Exited alarm display, returning to flowing mode.\r\n");
         }
         break;
     case 6:              // 按钮6: 递增当前设置字段
         if (g.disp.blinking) // 只有当有字段正在闪烁时才能递增
         {
             HandleButtonIncrement(false); // 递增字段
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Field incremented.\r\n");
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"No field selected for incrementing.\r\n");
         }
         break;
     case 7:                                                                     // 按钮7: 切换设置字段
@@ -664,7 +625,6 @@ static void HandleButtonShortPress(uint8_t button_num)
                 {
                     g.disp.field = FIELD_YEAR;
                 }
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Cycling date field.\r\n");
             }
             else if (g.disp.mode == MODE_TIME_SET)
             {
@@ -680,7 +640,6 @@ static void HandleButtonShortPress(uint8_t button_num)
                 {
                     g.disp.field = FIELD_HOUR;
                 }
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Cycling time field.\r\n");
             }
             else if (g.disp.mode == MODE_ALARM_SET)
             {
@@ -696,14 +655,12 @@ static void HandleButtonShortPress(uint8_t button_num)
                 {
                     g.disp.field = FIELD_ALARM_HOUR;
                 }
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Cycling alarm field.\r\n");
             }
             g.disp.blinking = true;              // 启动闪烁
             g.disp.on = true; // 确保显示打开
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Field cycling not available in current mode.\r\n");
         }
         break;
     case 8: // 按钮8: 进入/退出设置模式或停止闪烁
@@ -713,7 +670,6 @@ static void HandleButtonShortPress(uint8_t button_num)
             // 如果正在闪烁，停止闪烁
             g.disp.blinking = false;
             g.disp.field = FIELD_NONE;
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Blinking stopped.\r\n");
         }
         else
         {
@@ -743,7 +699,6 @@ static void HandleButtonShortPress(uint8_t button_num)
                 g.disp.field = FIELD_YEAR; // 默认设置年份
                 g.disp.blinking = true;                 // 开始闪烁
                 g.disp.on = true;    // 确保显示打开
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Entering Date Setting Mode. Year field blinking.\r\n");
             }
             else if (old_mode == MODE_DATE_SET)
             {
@@ -754,7 +709,6 @@ static void HandleButtonShortPress(uint8_t button_num)
                 g.disp.field = FIELD_HOUR; // 默认设置小时
                 g.disp.blinking = true;                 // 开始闪烁
                 g.disp.on = true;    // 确保显示打开
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Entering Time Setting Mode. Hour field blinking.\r\n");
             }
             else if (old_mode == MODE_TIME_SET)
             {
@@ -765,7 +719,6 @@ static void HandleButtonShortPress(uint8_t button_num)
                 g.disp.field = FIELD_ALARM_HOUR; // 默认设置闹钟小时
                 g.disp.blinking = true;                       // 开始闪烁
                 g.disp.on = true;          // 确保显示打开
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Entering Alarm Setting Mode. Alarm Hour field blinking.\r\n");
             }
             else if (old_mode == MODE_ALARM_SET)
             {
@@ -777,7 +730,6 @@ static void HandleButtonShortPress(uint8_t button_num)
                 g.disp.shift_speed = g.disp.prev_shift_speed;     // 恢复之前的移位速度
                 g.clock.unsaved_changes_active = true;      // 标记有未保存更改
                 g.disp.on = true;    // 确保显示打开
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Exiting Setting Modes, returning to flowing display. Changes temporarily applied.\r\n");
             }
         }
         break;
@@ -815,7 +767,6 @@ static void HandleButtonLongPress(uint8_t button_num)
                     g.clock.year = g.clock.temp_year;
                     g.clock.month = g.clock.temp_month;
                     g.clock.day = g.clock.temp_day;
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Date truly saved.\r\n");
                 }
                 else
                 {
@@ -823,7 +774,6 @@ static void HandleButtonLongPress(uint8_t button_num)
                     g.clock.year = g.clock.original_year;
                     g.clock.month = g.clock.original_month;
                     g.clock.day = g.clock.original_day;
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid date, not truly saved! Reverted.\r\n");
                 }
             }
             else if (g.disp.mode == MODE_TIME_SET)
@@ -833,7 +783,6 @@ static void HandleButtonLongPress(uint8_t button_num)
                     g.clock.hh = g.clock.temp_hh;
                     g.clock.mm = g.clock.temp_mm;
                     g.clock.ss = g.clock.temp_ss;
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Time truly saved.\r\n");
                 }
                 else
                 {
@@ -841,7 +790,6 @@ static void HandleButtonLongPress(uint8_t button_num)
                     g.clock.hh = g.clock.original_hh;
                     g.clock.mm = g.clock.original_mm;
                     g.clock.ss = g.clock.original_ss;
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid time, not truly saved! Reverted.\r\n");
                 }
             }
             else if (g.disp.mode == MODE_ALARM_SET)
@@ -852,7 +800,6 @@ static void HandleButtonLongPress(uint8_t button_num)
                     g.clock.alm_mm = g.clock.temp_alm_mm;
                     g.clock.alm_ss = g.clock.temp_alm_ss;
                     PWMStop(); // 停止闹钟
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Alarm truly saved.\r\n");
                 }
                 else
                 {
@@ -860,7 +807,6 @@ static void HandleButtonLongPress(uint8_t button_num)
                     g.clock.alm_hh = g.clock.original_alm_hh;
                     g.clock.alm_mm = g.clock.original_alm_mm;
                     g.clock.alm_ss = g.clock.original_alm_ss;
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid alarm time, not truly saved! Reverted.\r\n");
                 }
             }
             else if (g.disp.mode == MODE_FLOWING || g.disp.mode == MODE_ALARM_DISPLAY)
@@ -876,7 +822,6 @@ static void HandleButtonLongPress(uint8_t button_num)
                 g.clock.original_alm_mm = g.clock.alm_mm;
                 g.clock.original_alm_ss = g.clock.alm_ss;
                 PWMStop(); // 停止闹钟
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Current settings truly saved.\r\n");
             }
 
             g.disp.long_press_saving = true; // 标记正在保存
@@ -892,7 +837,6 @@ static void HandleButtonLongPress(uint8_t button_num)
         break;
 
     default: // 其他按钮长按无功能
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Long press has no function for this button.\r\n");
         break;
     }
 }
@@ -911,7 +855,6 @@ static void HandleButtonIncrement(bool is_long_press_repeat)
 
     if (g.disp.long_press_saving) // 如果正在保存，则不能递增
     {
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Saving in progress, cannot increment.\r\n");
         return;
     }
 
@@ -1022,7 +965,6 @@ void HandleModeTimeout(void)
         g.clock.unsaved_changes_active = false;        // 清除未保存更改标志
         g.disp.long_press_saving = false; // 清除长按保存标志
         g.disp.on = true;       // 确保显示打开
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Timeout occurred. Reverted to original flowing display and discarded unsaved settings.\r\n");
     }
 }
 

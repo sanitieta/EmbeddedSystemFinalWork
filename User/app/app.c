@@ -20,8 +20,6 @@ void App_Init(void)
     memset(g.disp.alarm_buf, 0, sizeof(g.disp.alarm_buf));
     memset(g.disp.date_buf, 0, sizeof(g.disp.date_buf));
 
-    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Initialization successful! Type HELP for commands.\r\n");
-
     UpdateTimeAndDisplayBuffers();
     g.disp.shift = 0;
 

@@ -79,7 +79,6 @@ static void PutProtocolBuffer(const uint8_t *buffer, uint8_t len)
     normalized[len] = '\0';
 
     Display_FormatBufferForProtocol(normalized, len, formatted);
-    UARTStringPutNOBlocking(UART0_BASE, formatted);
 }
 
 static void ResetProtocolState(void)
@@ -401,10 +400,6 @@ void ProcessUartCommand(void)
             ResetProtocolState();
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:RST\r\n");
         }
-        else
-        {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *RST\r\n");
-        }
     }
 
     // 处理 "*SET:DATE" 命令 (设置日期)
@@ -423,7 +418,7 @@ void ProcessUartCommand(void)
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);                       // 年
             parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str);                   // 月
             parsed_val[2] = atoi((char *)g.uart.tokens[val_token_idx + 2].token_str);                   // 日
-            if (is_valid_date((uint16_t)parsed_val[0], (uint8_t)parsed_val[1], (uint8_t)parsed_val[2])) // 检查日期有效性
+            if (is_valid_date((uint16_t)parsed_val[0], (uint8_t)parsed_val[1], (uint8_t)parsed_val[2]))
             {
                 g.clock.year = (uint16_t)parsed_val[0];
                 g.clock.month = (uint8_t)parsed_val[1];
@@ -545,11 +540,6 @@ void ProcessUartCommand(void)
             g.clock.original_day = g.clock.day;
             g.clock.unsaved_changes_active = false;
             UpdateTimeAndDisplayBuffers();
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Date set successfully.\r\n");
-        }
-        else // 解析失败，发送错误消息
-        {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format or date values. Type HELP for usage.\r\n");
         }
     }
 
@@ -672,11 +662,6 @@ void ProcessUartCommand(void)
             g.clock.original_ss = g.clock.ss;
             g.clock.unsaved_changes_active = false;
             UpdateTimeAndDisplayBuffers();
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Time set successfully.\r\n");
-        }
-        else // 解析失败，发送错误消息
-        {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format or time values. Type HELP for usage.\r\n");
         }
     }
 
@@ -800,11 +785,6 @@ void ProcessUartCommand(void)
             g.clock.original_alm_ss = g.clock.alm_ss;
             g.clock.unsaved_changes_active = false;
             UpdateTimeAndDisplayBuffers();
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Alarm set successfully.\r\n");
-        }
-        else // 解析失败，发送错误消息
-        {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format or alarm time values. Type HELP for usage.\r\n");
         }
     }
 
@@ -818,7 +798,6 @@ void ProcessUartCommand(void)
                 g.disp.shifting = true;                 // 开启流动
                 g.disp.on = true; // 开启数码管显示
                 g.disp.msg_active = false;
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"7-Segment Display turned ON.\r\n");
                 Display_SendEvent();
                 g.clock.unsaved_changes_active = false;
             }
@@ -827,18 +806,15 @@ void ProcessUartCommand(void)
                 g.disp.shifting = false;                 // 停止流动
                 g.disp.on = false; // 关闭数码管显示
                 g.disp.msg_active = false;
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"7-Segment Display turned OFF.\r\n");
                 Display_SendEvent();
                 g.clock.unsaved_changes_active = false;
             }
             else // 无效参数
             {
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid argument. Usage: *SET:DISPLAY ON/OFF\r\n");
             }
         }
         else // 命令格式错误
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *SET:DISPLAY ON/OFF\r\n");
         }
     }
 
@@ -847,44 +823,20 @@ void ProcessUartCommand(void)
     {
         if (g.uart.num_tokens == current_param_idx + 1) // 确保参数数量正确
         {
-            if (compareTokens(&g.uart.tokens[current_param_idx], "LEFT", 4)) // "LEFT" (左移，正常顺序)
+            if (compareTokens(&g.uart.tokens[current_param_idx], "LEFT", 4)) // "LEFT"
             {
                 g.disp.shift_mode = false;
                 g.disp.reversed = false;
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Display format set to LEFT flow (normal order).\r\n");
-
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Current Time: ");
-                PutProtocolBuffer(g.disp.time_buf, 8);
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Current Date: ");
-                PutProtocolBuffer(g.disp.date_buf, 10);
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
                 Display_SendEvent();
                 g.clock.unsaved_changes_active = false;
             }
-            else if (compareTokens(&g.uart.tokens[current_param_idx], "RIGHT", 5)) // "RIGHT" (右移，反向顺序)
+            else if (compareTokens(&g.uart.tokens[current_param_idx], "RIGHT", 5)) // "RIGHT"
             {
                 g.disp.shift_mode = true;
                 g.disp.reversed = true;
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Display format set to RIGHT flow (reversed order).\r\n");
-
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Current Time: ");
-                PutProtocolBuffer(g.disp.time_buf, 8);
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Current Date: ");
-                PutProtocolBuffer(g.disp.date_buf, 10);
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
                 Display_SendEvent();
                 g.clock.unsaved_changes_active = false;
             }
-            else // 无效参数
-            {
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid argument. Usage: *SET:FORMAT LEFT/RIGHT\r\n");
-            }
-        }
-        else // 命令格式错误
-        {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *SET:FORMAT LEFT/RIGHT\r\n");
         }
     }
 
@@ -906,7 +858,6 @@ void ProcessUartCommand(void)
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *SET:MSG <text>\r\n");
         }
     }
 
@@ -933,7 +884,6 @@ void ProcessUartCommand(void)
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *SET:LED <hex2>\r\n");
         }
     }
 
@@ -965,12 +915,10 @@ void ProcessUartCommand(void)
             }
             else
             {
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid argument. Usage: *SET:MODE NIGHT/DAY\r\n");
             }
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *SET:MODE NIGHT/DAY\r\n");
         }
     }
 
@@ -979,8 +927,6 @@ void ProcessUartCommand(void)
     {
         field_token_idx = current_param_idx;
         found_arg = false;
-
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Requested Date fields: ");
 
         if (g.uart.num_tokens == field_token_idx) // 如果没有指定字段，则返回完整日期
         {
@@ -993,39 +939,31 @@ void ProcessUartCommand(void)
             {
                 if (compareFieldKeyword(&g.uart.tokens[i], "YEAR", 4)) // "YEAR"
                 {
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Year=");
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)((g.clock.year / 1000) % 10) + '0');
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)((g.clock.year / 100) % 10) + '0');
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)((g.clock.year / 10) % 10) + '0');
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.year % 10) + '0');
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)" ");
                     found_arg = true;
                 }
                 else if (compareFieldKeyword(&g.uart.tokens[i], "MONTH", 5)) // "MONTH"
                 {
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Month=");
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.month / 10) + '0');
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.month % 10) + '0');
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)" ");
                     found_arg = true;
                 }
                 else if (compareFieldKeyword(&g.uart.tokens[i], "DATE", 3)) // "DATE" (日)
                 {
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Day=");
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.day / 10) + '0');
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.day % 10) + '0');
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)" ");
                     found_arg = true;
                 }
             }
         }
         if (!found_arg) // 如果没有找到有效参数
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid argument.\r\n");
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
         }
     }
 
@@ -1035,7 +973,6 @@ void ProcessUartCommand(void)
         field_token_idx = current_param_idx;
         found_arg = false;
 
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Requested Time fields: ");
 
         if (g.uart.num_tokens == field_token_idx) // 如果没有指定字段，则返回完整时间
         {
@@ -1048,37 +985,32 @@ void ProcessUartCommand(void)
             {
                 if (compareFieldKeyword(&g.uart.tokens[i], "HOUR", 4)) // "HOUR"
                 {
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Hour=");
+                    
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.hh / 10) + '0');
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.hh % 10) + '0');
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)" ");
                     found_arg = true;
                 }
                 else if (compareFieldKeyword(&g.uart.tokens[i], "MINUTE", 3)) // "MINUTE"
                 {
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Minute=");
+                    
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.mm / 10) + '0');
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.mm % 10) + '0');
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)" ");
                     found_arg = true;
                 }
                 else if (compareFieldKeyword(&g.uart.tokens[i], "SECOND", 3)) // "SECOND"
                 {
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Second=");
+                    
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.ss / 10) + '0');
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.ss % 10) + '0');
-                    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)" ");
                     found_arg = true;
                 }
             }
         }
         if (!found_arg) // 如果没有找到有效参数
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid argument.\r\n");
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
         }
     }
 
@@ -1087,18 +1019,7 @@ void ProcessUartCommand(void)
     {
         if (g.uart.num_tokens == current_param_idx) // 确保没有额外参数
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Current Alarm: ");
-            if (g.clock.alm_hh == 25) // 未设置闹钟
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Alarm not set.\r\n");
-            else // 显示闹钟时间
-            {
-                PutProtocolBuffer(g.disp.alarm_buf, 8);
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
-            }
-        }
-        else // 命令格式错误
-        {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *GET:ALARM\r\n");
+            PutProtocolBuffer(g.disp.alarm_buf, 8);
         }
     }
 
@@ -1107,15 +1028,7 @@ void ProcessUartCommand(void)
     {
         if (g.uart.num_tokens == current_param_idx) // 确保没有额外参数
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Current Display Format: ");
-            if (g.disp.shift_mode == false) // 左移 (正常顺序)
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"LEFT (Normal Order)\r\n");
-            else // 右移 (反向顺序)
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"RIGHT (Reversed Order)\r\n");
-        }
-        else // 命令格式错误
-        {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *GET:FORMAT\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, g.disp.shift_mode ? (uint8_t *)"RIGHT\r\n" : (uint8_t *)"LEFT\r\n");
         }
     }
 
@@ -1124,15 +1037,7 @@ void ProcessUartCommand(void)
     {
         if (g.uart.num_tokens == current_param_idx) // 确保没有额外参数
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"7-Segment Display Status: ");
-            if (g.disp.on == true) // 开启
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ON (Normal Display)\r\n");
-            else // 关闭
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OFF (All Segments Off)\r\n");
-        }
-        else // 命令格式错误
-        {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *GET:DISPLAY\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, g.disp.on ? (uint8_t *)"ON\r\n" : (uint8_t *)"OFF\r\n");
         }
     }
 
@@ -1142,11 +1047,9 @@ void ProcessUartCommand(void)
         if (g.uart.num_tokens == current_param_idx)
         {
             g.motor.running = 1;
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Stepper motor started.\r\n");
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *MOTOR:START\r\n");
         }
     }
 
@@ -1156,11 +1059,9 @@ void ProcessUartCommand(void)
         if (g.uart.num_tokens == current_param_idx)
         {
             g.motor.running = 0;
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Stepper motor stopped.\r\n");
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *MOTOR:STOP\r\n");
         }
     }
 
@@ -1170,11 +1071,9 @@ void ProcessUartCommand(void)
         if (g.uart.num_tokens == current_param_idx)
         {
             g.motor.direction = 0;
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Stepper motor direction set to forward.\r\n");
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *MOTOR:FWD\r\n");
         }
     }
 
@@ -1184,11 +1083,9 @@ void ProcessUartCommand(void)
         if (g.uart.num_tokens == current_param_idx)
         {
             g.motor.direction = 1;
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Stepper motor direction set to reverse.\r\n");
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *MOTOR:REV\r\n");
         }
     }
 
@@ -1197,18 +1094,13 @@ void ProcessUartCommand(void)
     {
         if (g.uart.num_tokens == current_param_idx)
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Stepper Motor Status:\r\n");
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"  State: ");
-            UARTStringPutNOBlocking(UART0_BASE, g.motor.running ? (uint8_t *)"RUNNING" : (uint8_t *)"STOPPED");
+            UARTStringPutNOBlocking(UART0_BASE, g.motor.running ? (uint8_t *)"1" : (uint8_t *)"0");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)" ");
+            UARTStringPutNOBlocking(UART0_BASE, g.motor.direction ? (uint8_t *)"1" : (uint8_t *)"0");
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"  Direction: ");
-            UARTStringPutNOBlocking(UART0_BASE, g.motor.direction ? (uint8_t *)"REVERSE" : (uint8_t *)"FORWARD");
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"  Speed: 1 RPM\r\n");
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *GET:MOTOR\r\n");
         }
     }
 
@@ -1217,72 +1109,8 @@ void ProcessUartCommand(void)
     {
         if (g.uart.num_tokens == current_param_idx)
             SysCtlReset(); // 系统复位
-        else
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: INIT\r\n");
     }
 
-    // 处理 "HELP" 命令 (显示帮助文档)
-    else if (compareTokens(&g.uart.tokens[0], "HELP", 4))
-    {
-        if (g.uart.num_tokens == current_param_idx) // 确保没有额外参数
-        {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"HELP Document:\r\n"
-                                                           "*RST                                       : Reset the clock.\r\n"
-                                                           "*SET :DATE YEAR MONTH DATE YYYY MM DD      : Set g.clock.year, g.clock.month and g.clock.day.\r\n"
-                                                           "*SET :DATE YEAR MONTH YYYY MM              : Set g.clock.year and g.clock.month.\r\n"
-                                                           "*SET :DATE YEAR DATE YYYY DD               : Set g.clock.year and g.clock.day.\r\n"
-                                                           "*SET :DATE MONTH DATE MM DD                : Set g.clock.month and g.clock.day.\r\n"
-                                                           "*SET :DATE YEAR YYYY                       : Set g.clock.year.\r\n"
-                                                           "*SET :DATE MONTH MM                        : Set g.clock.month.\r\n"
-                                                           "*SET :DATE DATE DD                         : Set g.clock.day.\r\n"
-                                                           "*SET :TIME HOUR MINUTE SECOND HH MM SS     : Set hour, minute and second.\r\n"
-                                                           "*SET :TIME HOUR MINUTE HH MM               : Set hour and minute.\r\n"
-                                                           "*SET :TIME HOUR SECOND HH SS               : Set hour and second.\r\n"
-                                                           "*SET :TIME MINUTE SECOND MM SS             : Set minute and second.\r\n"
-                                                           "*SET :TIME HOUR HH                         : Set hour.\r\n"
-                                                           "*SET :TIME MINUTE MM                       : Set minute.\r\n"
-                                                           "*SET :TIME SECOND SS                       : Set second.\r\n"
-                                                           "*SET :ALARM HOUR MINUTE SECOND HH MM SS    : Set alarm hour, minute and second.\r\n"
-                                                           "*SET :ALARM HOUR MINUTE HH MM              : Set alarm hour and minute.\r\n"
-                                                           "*SET :ALARM HOUR SECOND HH SS              : Set alarm hour and second.\r\n"
-                                                           "*SET :ALARM MINUTE SECOND MM SS            : Set alarm minute and second.\r\n"
-                                                           "*SET :ALARM HOUR HH                        : Set alarm hour.\r\n"
-                                                           "*SET :ALARM MINUTE MM                      : Set alarm minute.\r\n"
-                                                           "*SET :ALARM SECOND SS                      : Set alarm second.\r\n"
-                                                           "*SET :DISPLAY ON/OFF                       : Set 7-segment display.\r\n"
-                                                           "*SET :FORMAT LEFT/RIGHT                    : Set display flow direction and order.\r\n"
-                                                           "*SET :MSG <text>                           : Show a temporary message.\r\n"
-                                                           "*SET :LED <hex2>                           : Force LEDs; 00 restores default logic.\r\n"
-                                                           "*SET :MODE NIGHT/DAY                       : Set night/day mode.\r\n"
-                                                           "*GET :DATE                                 : Get g.clock.year, g.clock.month and g.clock.day.\r\n"
-                                                           "*GET :DATE YEAR MONTH                      : Get g.clock.year and g.clock.month.\r\n"
-                                                           "*GET :DATE YEAR DATE                       : Get g.clock.year and g.clock.day.\r\n"
-                                                           "*GET :DATE MONTH DATE                      : Get g.clock.month and g.clock.day.\r\n"
-                                                           "*GET :DATE YEAR                            : Get g.clock.year.\r\n"
-                                                           "*GET :DATE MONTH                           : Get g.clock.month.\r\n"
-                                                           "*GET :DATE DATE                            : Get g.clock.day.\r\n"
-                                                           "*GET :TIME                                 : Get hour, minute and second.\r\n"
-                                                           "*GET :TIME HOUR MINUTE                     : Get hour and minute.\r\n"
-                                                           "*GET :TIME HOUR SECOND                     : Get hour and second.\r\n"
-                                                           "*GET :TIME MINUTE SECOND                   : Get minute and second.\r\n"
-                                                           "*GET :TIME HOUR                            : Get hour.\r\n"
-                                                           "*GET :TIME MINUTE                          : Get minute.\r\n"
-                                                           "*GET :TIME SECOND                          : Get second.\r\n"
-                                                           "*GET :ALARM                                : Get alarm time.\r\n"
-                                                           "*GET :DISPLAY                              : Get 7-segment display status.\r\n"
-                                                           "*GET :FORMAT                               : Get display flow format.\r\n"
-                                                           "*MOTOR :START                              : Start stepper motor (1 RPM).\r\n"
-                                                           "*MOTOR :STOP                               : Stop stepper motor.\r\n"
-                                                           "*MOTOR :FWD                                : Set stepper motor forward.\r\n"
-                                                           "*MOTOR :REV                                : Set stepper motor reverse.\r\n"
-                                                           "*GET :MOTOR                                : Get stepper motor status.\r\n"
-                                                           "PING                                       : Respond with *PONG <uptime_s>.\r\n");
-        }
-        else // 命令格式错误
-        {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: HELP\r\n");
-        }
-    }
     // 处理 "PING" 命令 (连接保活)
     else if (compareTokens(&g.uart.tokens[0], "PING", 4))
     {
@@ -1325,17 +1153,16 @@ void ProcessUartCommand(void)
             pong_buf[len] = '\0';
 
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)pong_buf);
+
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: PING\r\n");
         }
     }
     else // 未知命令
     {
         if (g.uart.num_tokens > 0)
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Unknown command. Type HELP for commands.\r\n");
         }
     }
 

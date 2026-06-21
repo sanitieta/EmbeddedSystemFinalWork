@@ -1292,6 +1292,32 @@ void ProcessUartCommand(void)
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
         }
     }
+    // 处理 "HELP" 命令 (显示帮助)
+    else if (compareTokens(&g.uart.tokens[0], "HELP", 4))
+    {
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)
+            "*RST                                       : Reset protocol state.\r\n"
+            "*SET:DATE YEAR MONTH DATE YYYY MM DD      : Set date (partial fields supported).\r\n"
+            "*SET:TIME HOUR MINUTE SECOND HH MM SS     : Set time (partial fields supported).\r\n"
+            "*SET:ALARM HOUR MINUTE SECOND HH MM SS    : Set alarm (partial fields supported).\r\n"
+            "*SET:DISPLAY ON/OFF                       : Turn 7-segment display on/off.\r\n"
+            "*SET:FORMAT LEFT/RIGHT                    : Set display direction.\r\n"
+            "*SET:MSG <text>                           : Show temporary message (max 32 bytes).\r\n"
+            "*SET:LED <hex2>                           : LED takeover; 00 restores default.\r\n"
+            "*SET:MODE NIGHT/DAY                       : Night/day mode.\r\n"
+            "*SET:KEY USER1/USER2/EXT                  : Virtual key injection.\r\n"
+            "*GET:DATE [YEAR] [MONTH] [DATE]           : Get date.\r\n"
+            "*GET:TIME [HOUR] [MINUTE] [SECOND]        : Get time.\r\n"
+            "*GET:ALARM                                : Get alarm time.\r\n"
+            "*GET:DISPLAY                              : Get display state.\r\n"
+            "*GET:FORMAT                               : Get display format.\r\n"
+            "*MOTOR:START/STOP/FWD/REV                 : Stepper motor control.\r\n"
+            "*GET:MOTOR                                : Get motor status.\r\n"
+            "*PING                                     : Responds *PONG <uptime_s>.\r\n"
+            "INIT                                      : Software system reset.\r\n"
+            "HELP                                      : Show this help.\r\n");
+    }
     else // 未知命令
     {
         if (g.uart.num_tokens > 0)

@@ -955,22 +955,22 @@ void ProcessUartCommand(void)
                 Display_SendEvent();
                 Display_UpdateStatusLeds();
             }
-            else if (compareTokens(&g.uart.tokens[current_param_idx], "NORMAL", 6))
+            else if (compareTokens(&g.uart.tokens[current_param_idx], "DAY", 3))
             {
                 g.disp.night_mode = false;
-                Display_SendModeEvent("NORMAL");
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:MODE NORMAL\r\n");
+                Display_SendModeEvent("DAY");
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:MODE DAY\r\n");
                 Display_SendEvent();
                 Display_UpdateStatusLeds();
             }
             else
             {
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid argument. Usage: *SET:MODE NIGHT/NORMAL\r\n");
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid argument. Usage: *SET:MODE NIGHT/DAY\r\n");
             }
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *SET:MODE NIGHT/NORMAL\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"Invalid command format. Usage: *SET:MODE NIGHT/DAY\r\n");
         }
     }
 
@@ -1253,7 +1253,7 @@ void ProcessUartCommand(void)
                                                            "*SET :FORMAT LEFT/RIGHT                    : Set display flow direction and order.\r\n"
                                                            "*SET :MSG <text>                           : Show a temporary message.\r\n"
                                                            "*SET :LED <hex2>                           : Force LEDs; 00 restores default logic.\r\n"
-                                                           "*SET :MODE NIGHT/NORMAL                    : Set night mode.\r\n"
+                                                           "*SET :MODE NIGHT/DAY                       : Set night/day mode.\r\n"
                                                            "*GET :DATE                                 : Get g.clock.year, g.clock.month and g.clock.day.\r\n"
                                                            "*GET :DATE YEAR MONTH                      : Get g.clock.year and g.clock.month.\r\n"
                                                            "*GET :DATE YEAR DATE                       : Get g.clock.year and g.clock.day.\r\n"

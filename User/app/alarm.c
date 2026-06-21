@@ -36,6 +36,7 @@ void HandleAlarm(void)
         {
             g.disp.alarm_ringing = true;
             g.disp.alarm_ring_start = g.timer.tick;
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:ALARM\r\n");
             g.disp.alarm_beep_phase = g.timer.tick;
             if (g.disp.night_mode)
             {
@@ -99,6 +100,8 @@ void HandleAlarm(void)
 
 void StopAlarmRinging(bool silence_current_match)
 {
+    bool was_ringing = g.disp.alarm_ringing;
+
     PWMStop();
     g.disp.alarm_ringing = false;
     g.disp.alarm_beep_on = false;
@@ -107,5 +110,9 @@ void StopAlarmRinging(bool silence_current_match)
     if (silence_current_match)
     {
         g.disp.alarm_silenced = true;
+    }
+    if (was_ringing)
+    {
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:ALARM OFF\r\n");
     }
 }

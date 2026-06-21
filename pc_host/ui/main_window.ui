@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    S800 智能互联时钟 — PC 上位机 主窗口布局
+    =========================================
+    在 Qt Designer 中打开此文件进行可视化编辑。
+
+    布局要求:
+    ┌────────────────────────────────────────────────┐
+    │  Menu Bar                                      │
+    ├──────────┬──────────────┬──────────────────────┤
+    │          │              │                      │
+    │ Twin     │  Control     │  Log Panel           │
+    │ Panel    │  Panel       │                      │
+    │ (左侧)   │  (中间)      │  (右侧)             │
+    │          │              │                      │
+    ├──────────┴──────────────┴──────────────────────┤
+    │  Status Bar: CONNECTION | FORMAT | MODE | ALARM│
+    └────────────────────────────────────────────────┘
+-->
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="windowTitle">
+   <string>S800 智能互联时钟 — PC 上位机</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <!-- TODO: 设计具体布局 -->
+  </widget>
+  <widget class="QMenuBar" name="menubar"/>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+</ui>

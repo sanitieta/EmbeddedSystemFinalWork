@@ -53,6 +53,9 @@ class SerialWorker(QThread):
         # 最后一次连接错误 (供 UI 查询)
         self.last_port_error: str = ""
 
+        # 防止 _check_heartbeat 超时路径重复发射 port_error
+        self._port_error_sent: bool = False
+
     # ---- Public API (called from main thread) ----
 
     def available_ports(self) -> list[str]:
@@ -87,8 +90,8 @@ class SerialWorker(QThread):
             self._connect_time = time.monotonic()
             self._last_pong_time = time.monotonic()
             self._any_data_received = False
+            self._port_error_sent = False
             self.last_port_error = ""
-            self.port_error.emit("")
             self.connection_changed.emit(True)
             return True
         except serial.SerialException as e:
@@ -207,7 +210,7 @@ class SerialWorker(QThread):
             self._ping_pending = True
             with QMutexLocker(self._tx_mutex):
                 try:
-                    self.serial.write(b"PING\r\n")
+                    self.serial.write(b"*PING\r\n")
                 except serial.SerialException:
                     pass
 
@@ -216,8 +219,9 @@ class SerialWorker(QThread):
         if (self._connected and self._ping_pending
                 and (now - self._last_pong_time > self.PONG_TIMEOUT_S)
                 and (now - self._connect_time) > self.CONNECT_GRACE_PERIOD_S):
-            if not self._any_data_received:
+            if not self._port_error_sent and not self._any_data_received:
                 self.port_error.emit("串口已打开但 MCU 无应答 — 请检查固件和波特率")
+                self._port_error_sent = True
             self._connected = False
             self._ping_pending = False
             self.connection_changed.emit(False)

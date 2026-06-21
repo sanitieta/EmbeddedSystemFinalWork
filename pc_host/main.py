@@ -238,12 +238,23 @@ class MainWindow(QMainWindow):
                 return
             self.status_bar.showMessage("正在连接 " + port + " ...", 0)
             self.btn_connect.setEnabled(False)
-            success = self.serial_worker.connect_to(port)
+            try:
+                success = self.serial_worker.connect_to(port)
+            except OSError as e:
+                success = False
+                self.serial_worker.last_port_error = str(e)
+                self.serial_worker.port_error.emit(str(e))
             self.btn_connect.setEnabled(True)
             if not success:
-                self.status_bar.showMessage("连接 " + port + " 失败", 5000)
-                QMessageBox.warning(self, "连接失败",
-                                    f"无法打开 {port}\n请检查端口是否被其他程序占用。")
+                err = self.serial_worker.last_port_error
+                if err and ("PermissionError" in err or "拒绝访问" in err):
+                    self.status_bar.showMessage("连接 " + port + " 失败 — COM口被占用", 5000)
+                    QMessageBox.warning(self, "连接失败",
+                                        f"COM口被占用\n\n{port} 正在被另一个程序使用。\n请关闭其他串口工具（如 SecureCRT、Putty、串口助手等）后重试。")
+                else:
+                    self.status_bar.showMessage("连接 " + port + " 失败", 5000)
+                    QMessageBox.warning(self, "连接失败",
+                                        f"无法打开 {port}\n请检查端口是否被其他程序占用。")
             else:
                 self.status_bar.showMessage("已连接 " + port, 3000)
                 # 立即验证 MCU 响应
@@ -490,6 +501,8 @@ class MainWindow(QMainWindow):
 
     def _on_port_error(self, error_msg: str):
         """端口错误信号处理"""
+        if not error_msg or not error_msg.strip():
+            return
         self.status_bar.showMessage("端口错误: " + error_msg, 8000)
         self.log_panel.add_error("端口错误: " + error_msg)
 

@@ -147,8 +147,6 @@ static uint8_t FindRawPayloadOffset(uint8_t token_idx)
 }
 
 // 比较命令Token与字符串，支持最小匹配长度
-
-// 比较命令Token与字符串，支持最小匹配长度
 bool compareTokens(const command_token_t *token, const char *str_literal, uint8_t min_match_len)
 {
     uint8_t i;
@@ -234,8 +232,6 @@ static bool compareTokens_modified_for_colon_prefix(const uint8_t *token_str_ptr
     }
     return true;
 }
-
-// 匹配命令，支持形如 `*CMD:SUB_CMD` 的命令格式
 
 // 匹配命令，支持形如 `*CMD:SUB_CMD` 的命令格式
 static bool matchCommand(const command_token_t *t0, const command_token_t *t1, uint8_t num_tokens_total, const char *cmd_full_str)
@@ -372,8 +368,6 @@ static void ParseUartInput(void)
         g.uart.num_tokens++;
     }
 }
-
-// 处理UART接收到的命令
 
 // 处理UART接收到的命令
 void ProcessUartCommand(void)
@@ -1251,7 +1245,7 @@ void ProcessUartCommand(void)
             char pong_buf[24];
             uint32_t uptime_s = g.timer.tick / 1000U;
             uint8_t len = 0;
-            uint8_t i;
+            uint8_t ij;
 
             /* 手动构建 "*PONG <uptime_s>\r\n" 避免依赖 sprintf */
             pong_buf[0] = '*'; pong_buf[1] = 'P'; pong_buf[2] = 'O'; pong_buf[3] = 'N';
@@ -1276,8 +1270,8 @@ void ProcessUartCommand(void)
                     }
                 }
                 /* 逆序写入 */
-                for (i = num_len; i > 0; --i)
-                    pong_buf[len++] = num_buf[i - 1U];
+                for (ij = num_len; ij > 0; --ij)
+                    pong_buf[len++] = num_buf[ij - 1U];
             }
 
             pong_buf[len++] = '\r';
@@ -1292,6 +1286,32 @@ void ProcessUartCommand(void)
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
         }
     }
+    // 处理 "HELP" 命令 (显示帮助)
+    else if (compareTokens(&g.uart.tokens[0], "HELP", 4))
+    {
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
+        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)
+            "*RST                                       : Reset protocol state.\r\n"
+            "*SET:DATE YEAR MONTH DATE YYYY MM DD      : Set date (partial fields supported).\r\n"
+            "*SET:TIME HOUR MINUTE SECOND HH MM SS     : Set time (partial fields supported).\r\n"
+            "*SET:ALARM HOUR MINUTE SECOND HH MM SS    : Set alarm (partial fields supported).\r\n"
+            "*SET:DISPLAY ON/OFF                       : Turn 7-segment display on/off.\r\n"
+            "*SET:FORMAT LEFT/RIGHT                    : Set display direction.\r\n"
+            "*SET:MSG <text>                           : Show temporary message (max 32 bytes).\r\n"
+            "*SET:LED <hex2>                           : LED takeover; 00 restores default.\r\n"
+            "*SET:MODE NIGHT/DAY                       : Night/day mode.\r\n"
+            "*SET:KEY USER1/USER2/EXT                  : Virtual key injection.\r\n"
+            "*GET:DATE [YEAR] [MONTH] [DATE]           : Get date.\r\n"
+            "*GET:TIME [HOUR] [MINUTE] [SECOND]        : Get time.\r\n"
+            "*GET:ALARM                                : Get alarm time.\r\n"
+            "*GET:DISPLAY                              : Get display state.\r\n"
+            "*GET:FORMAT                               : Get display format.\r\n"
+            "*MOTOR:START/STOP/FWD/REV                 : Stepper motor control.\r\n"
+            "*GET:MOTOR                                : Get motor status.\r\n"
+            "*PING                                     : Responds *PONG <uptime_s>.\r\n"
+            "INIT                                      : Software system reset.\r\n"
+            "HELP                                      : Show this help.\r\n");
+    }
     else // 未知命令
     {
         if (g.uart.num_tokens > 0)
@@ -1303,5 +1323,3 @@ void ProcessUartCommand(void)
     g.uart.rx_len = 0;                                        // 清空接收长度
     memset(g.uart.rx_buf, 0, sizeof(g.uart.rx_buf)); // 清空接收缓冲区
 }
-
-// 判断给定年份是否为闰年

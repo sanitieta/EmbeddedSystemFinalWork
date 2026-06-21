@@ -152,12 +152,16 @@ class ControlPanel(QWidget):
         self.btn_format_right = QPushButton("FORMAT RIGHT")
         self.btn_mode_day = QPushButton("MODE DAY")
         self.btn_mode_night = QPushButton("MODE NIGHT")
+        self.btn_get_display = QPushButton("获取显示")
+        self.btn_get_format = QPushButton("获取格式")
         disp_layout.addWidget(self.btn_disp_on)
         disp_layout.addWidget(self.btn_disp_off)
         disp_layout.addWidget(self.btn_format_left)
         disp_layout.addWidget(self.btn_format_right)
         disp_layout.addWidget(self.btn_mode_day)
         disp_layout.addWidget(self.btn_mode_night)
+        disp_layout.addWidget(self.btn_get_display)
+        disp_layout.addWidget(self.btn_get_format)
         disp_group.setLayout(disp_layout)
         layout.addWidget(disp_group)
 
@@ -250,6 +254,10 @@ class ControlPanel(QWidget):
             self.protocol.build_set_mode(False)))
         self.btn_mode_night.clicked.connect(lambda: self.send_command.emit(
             self.protocol.build_set_mode(True)))
+        self.btn_get_display.clicked.connect(lambda: self.send_command.emit(
+            self.protocol.build_get_display()))
+        self.btn_get_format.clicked.connect(lambda: self.send_command.emit(
+            self.protocol.build_get_format()))
 
         # 消息/LED
         self.btn_msg_send.clicked.connect(self._on_msg_send)
@@ -364,11 +372,21 @@ class ControlPanel(QWidget):
     # ── 演示按钮 ──
 
     def _on_demo_abbrev(self):
-        """发送最小匹配缩写命令"""
+        """发送最小匹配缩写命令
+
+        MCU 命令解析器支持最小匹配 (min-match)：只要前缀能唯一确定一个 token 即可。
+        例如 "DAT" 匹配 "DATE", "YEA" 匹配 "YEAR", "MON" 匹配 "MONTH"。
+        实际使用时建议发送完整 token，仅测试时使用缩写。
+        """
         self.send_command.emit("*SET:DAT YEA MON 2025 6 15")
 
     def _on_demo_case(self):
-        """发送大小写混合命令"""
+        """发送大小写混合命令
+
+        MCU 命令解析器对大小写不敏感 (case-insensitive)。
+        例如 "*SeT:DaTe" 与 "*SET:DATE" 效果完全相同。
+        实际使用时建议使用标准大写格式。
+        """
         self.send_command.emit("*SeT:DaTe YeAr MoNtH dAtE 2025 6 15")
 
     # ── 控件使能控制 ──

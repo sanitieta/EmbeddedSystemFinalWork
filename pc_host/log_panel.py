@@ -10,10 +10,10 @@
 from datetime import datetime
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
-    QPlainTextEdit, QPushButton, QLabel, QFileDialog,
+    QPlainTextEdit, QPushButton, QLabel, QFileDialog, QCheckBox,
 )
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QTextCursor, QColor, QTextCharFormat
+from PyQt5.QtGui import QTextCursor, QColor, QTextCharFormat, QFont
 
 
 MAX_LINES = 1000
@@ -31,7 +31,10 @@ class LogPanel(QWidget):
 
         # 标题行
         header = QHBoxLayout()
-        header.addWidget(QLabel("收发日志 (最新在上)"))
+        header.addWidget(QLabel("收发日志"))
+        self.chk_newest_first = QCheckBox("最新在上")
+        self.chk_newest_first.setChecked(True)
+        header.addWidget(self.chk_newest_first)
         header.addStretch()
         self.btn_clear = QPushButton("清空")
         self.btn_export = QPushButton("导出")
@@ -43,7 +46,7 @@ class LogPanel(QWidget):
         self.log_edit = QPlainTextEdit()
         self.log_edit.setReadOnly(True)
         self.log_edit.setMaximumBlockCount(MAX_LINES)
-        self.log_edit.setFont(self.log_edit.font())  # 使用等宽字体更好
+        self.log_edit.setFont(QFont("Consolas", 10))
         layout.addWidget(self.log_edit)
 
         # 连接信号
@@ -71,19 +74,30 @@ class LogPanel(QWidget):
     # ── 内部实现 ──
 
     def _append_line(self, line: str, direction: str, color: QColor):
-        """追加一行带时间戳的日志"""
+        """追加一行带时间戳的日志
+
+        当 "最新在上" 选中时，新条目插入到顶部；否则追加到底部。
+        """
         now = datetime.now()
         timestamp = now.strftime("%H:%M:%S.") + f"{now.microsecond // 1000:03d}"
 
         fmt = QTextCharFormat()
         fmt.setForeground(color)
 
-        cursor = self.log_edit.textCursor()
-        cursor.movePosition(QTextCursor.End)
-        cursor.insertText(f"[{timestamp}] {direction} {line}\n", fmt)
+        entry = f"[{timestamp}] {direction} {line}\n"
 
-        # 自动滚动到底部
-        self.log_edit.setTextCursor(cursor)
+        if self.chk_newest_first.isChecked():
+            # 最新在上：光标移到开头插入
+            cursor = self.log_edit.textCursor()
+            cursor.movePosition(QTextCursor.Start)
+            cursor.insertText(entry, fmt)
+        else:
+            # 最新在下：追加到底部
+            cursor = self.log_edit.textCursor()
+            cursor.movePosition(QTextCursor.End)
+            cursor.insertText(entry, fmt)
+            # 自动滚动到底部
+            self.log_edit.setTextCursor(cursor)
 
     def _export_log(self):
         """导出日志到文件"""

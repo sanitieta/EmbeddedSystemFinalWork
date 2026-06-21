@@ -37,12 +37,13 @@ class NtpHelper:
         """手动触发 NTP 对时，返回 (成功, 消息)"""
         return self._do_sync()
 
-    def sync_from_user1(self):
+    def sync_from_user1(self) -> tuple[bool, str]:
         """
         USER1 自动触发对时 (E1 要求)
         由 main.py 在收到 *EVT:KEY USER1 时调用
+        返回 (成功, 消息)
         """
-        self._do_sync()
+        return self._do_sync()
 
     def _do_sync(self) -> tuple[bool, str]:
         """执行 NTP 同步流程"""

@@ -1,155 +1,285 @@
 """
-数字孪生镜像面板
-================
-软件仿真 S800 板的 8 位 7SEG + 8 位 LED + 8 按键 + 2 独立按键，
-与 MCU 双向同步:
+Digital Twin Mirror Panel
+==========================
+Software simulation of the S800 board: 8-digit 7-segment display, 8 LEDs,
+8 matrix keys (K1-K8), and 2 independent user keys (USER1/USER2).
 
-- *EVT:DISP → 更新 7SEG 显示 (含小数点)
-- *EVT:LED  → 更新 LED 亮灭
-- 点击虚拟按键 → *SET:KEY <NAME>
-- *EVT:MODE NIGHT → 仅显示 4 位时分 + LED0 心跳
-- FORMAT RIGHT → 字符反转 + DP 位图反转
+Bidirectional sync with MCU firmware over the UART ASCII protocol:
+- *EVT:DISP  -> update 7SEG display (characters and decimal point bitmap)
+- *EVT:LED   -> update LED on/off state
+- *EVT:MODE  -> update panel rendering mode (DAY / NIGHT)
+- *EVT:KEY   -> highlight the corresponding virtual key
+- Virtual key click -> emit "*SET:KEY <NAME>" for serial delivery to MCU
+
+Format RIGHT rules:
+- 8-character display string is reversed.
+- Decimal-point bitmap is reversed (bit N -> bit 6-N).
+
+Night Mode:
+- Only digit positions 0-3 (HH.MM) are visible; positions 4-7 are blanked.
+- Only LED0 (heartbeat) remains lit; LEDs 1-7 are forced off.
 """
 
-from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QPushButton, QLabel, QFrame, QSizePolicy,
-)
+from __future__ import annotations
+
+from typing import ClassVar
+
 from PyQt5.QtCore import (
-    Qt, QTimer, pyqtSignal, QRectF, QPointF,
+    Qt,
+    QPointF,
+    QRectF,
+    QTimer,
+    pyqtSignal,
 )
 from PyQt5.QtGui import (
-    QPainter, QPainterPath, QColor, QPen, QBrush,
-    QFont, QPolygonF, QRadialGradient, QPaintEvent,
+    QBrush,
+    QColor,
+    QFont,
+    QPainter,
+    QPainterPath,
+    QRadialGradient,
+    QPaintEvent,
+)
+from PyQt5.QtWidgets import (
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
 )
 
 
-# ═══════════════════════════════════════════════════════════════
-# 7 段数码管自绘 Widget
-# ═══════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
+# Segment geometry
+# ---------------------------------------------------------------------------
+# Each segment is a trapezoid polygon defined in a unit-square coordinate
+# system (0.0-1.0).  The painter applies translate + scale to map these
+# coordinates onto the actual widget pixel area.
+#
+# Segment bit mapping (standard 7-seg, bit 0 = A):
+#
+#        AAAA
+#       F    B
+#       F    B
+#        GGGG
+#       E    C
+#       E    C
+#        DDDD   . dp
+#
+# A: top horizontal      B: top-right vertical
+# C: bottom-right vert   D: bottom horizontal
+# E: bottom-left vert    F: top-left vertical
+# G: middle horizontal
 
-# 段定义: 每个段是一条从起点到终点的多边形 (相对坐标 0.0–1.0)
-# 标准 7 段布局:
-#      AAAA
-#     F    B
-#     F    B
-#      GGGG
-#     E    C
-#     E    C
-#      DDDD   ● dp
-
-# 每个段的顶点坐标 (相对于单位正方形)
-_SEGMENTS = {
+_SEGMENT_POINTS: dict[str, list[tuple[float, float]]] = {
     "A": [(0.10, 0.05), (0.90, 0.05), (0.85, 0.10), (0.15, 0.10)],
     "B": [(0.90, 0.10), (0.95, 0.45), (0.90, 0.50), (0.85, 0.45), (0.85, 0.15)],
     "C": [(0.90, 0.55), (0.95, 0.90), (0.90, 0.95), (0.85, 0.90), (0.85, 0.60)],
     "D": [(0.10, 0.90), (0.90, 0.90), (0.85, 0.95), (0.15, 0.95)],
-    "E": [(0.05, 0.55), (0.10, 0.50), (0.15, 0.55), (0.15, 0.90), (0.10, 0.95), (0.05, 0.90)],
-    "F": [(0.05, 0.10), (0.10, 0.05), (0.15, 0.10), (0.15, 0.45), (0.10, 0.50), (0.05, 0.45)],
+    "E": [
+        (0.05, 0.55),
+        (0.10, 0.50),
+        (0.15, 0.55),
+        (0.15, 0.90),
+        (0.10, 0.95),
+        (0.05, 0.90),
+    ],
+    "F": [
+        (0.05, 0.10),
+        (0.10, 0.05),
+        (0.15, 0.10),
+        (0.15, 0.45),
+        (0.10, 0.50),
+        (0.05, 0.45),
+    ],
     "G": [(0.10, 0.48), (0.90, 0.48), (0.85, 0.53), (0.15, 0.53)],
 }
 
-# 7 段码 → 段名映射 (标准共阳)
-# seg7[0] = 0x3F = 0b00111111 → A,B,C,D,E,F
-# seg7[1] = 0x06 = 0b00000110 → B,C
-# ...
-_SEG_MAP = {
-    0x01: "A", 0x02: "B", 0x04: "C", 0x08: "D",
-    0x10: "E", 0x20: "F", 0x40: "G",
+# Bit -> segment name lookup
+_SEGMENT_BIT_TO_NAME: dict[int, str] = {
+    0x01: "A",  # bit 0
+    0x02: "B",  # bit 1
+    0x04: "C",  # bit 2
+    0x08: "D",  # bit 3
+    0x10: "E",  # bit 4
+    0x20: "F",  # bit 5
+    0x40: "G",  # bit 6
 }
 
-COLOR_ON = QColor("#FF3030")       # 亮红色
-COLOR_OFF = QColor("#220000")      # 暗红色 (可见但明显区分)
-COLOR_BG = QColor("#0A0A0A")       # 背景
+# Colours
+_COLOR_ON: QColor = QColor("#FF3030")   # bright red
+_COLOR_OFF: QColor = QColor("#220000")   # dim dark red (visible but clearly off)
+_COLOR_BG: QColor = QColor("#0A0A0A")   # near-black background
 
+# Decimal-point centre in unit-square coordinates
+_DP_CENTER: QPointF = QPointF(0.92, 0.88)
+_DP_RX: float = 0.06
+_DP_RY: float = 0.08
+
+
+# ---------------------------------------------------------------------------
+# 7-segment display character code table (standard common-anode mapping)
+# ---------------------------------------------------------------------------
+
+_ASCII_TO_7SEG: dict[str, int] = {
+    "0": 0x3F,
+    "1": 0x06,
+    "2": 0x5B,
+    "3": 0x4F,
+    "4": 0x66,
+    "5": 0x6D,
+    "6": 0x7D,
+    "7": 0x07,
+    "8": 0x7F,
+    "9": 0x6F,
+    "A": 0x77,
+    "B": 0x7C,
+    "C": 0x39,
+    "D": 0x5E,
+    "E": 0x79,
+    "F": 0x71,
+    "G": 0x3D,
+    "H": 0x76,
+    "I": 0x06,
+    "J": 0x1E,
+    "L": 0x38,
+    "N": 0x54,
+    "O": 0x3F,
+    "P": 0x73,
+    "R": 0x50,
+    "S": 0x6D,
+    "T": 0x78,
+    "U": 0x3E,
+    "X": 0x76,
+    "Y": 0x6E,
+    "-": 0x40,
+    "_": 0x08,
+    "=": 0x48,
+    " ": 0x00,
+}
+
+
+# ---------------------------------------------------------------------------
+# SevenSegWidget — single 7-segment digit (plus decimal point)
+# ---------------------------------------------------------------------------
 
 class SevenSegWidget(QWidget):
-    """单个 7 段数码管 (含小数点)"""
+    """A single 7-segment digit drawn with QPainterPath trapezoid polygons.
 
-    def __init__(self, parent=None):
+    Public API:
+        set_segments(byte: int)  -- accept 0x00-0x7F segment bitmap
+        set_dp(on: bool)         -- control decimal point visibility
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._segments = 0x00  # 7 段码 (bit 0-6 = A-G)
-        self._dp = False       # 小数点
+        self._segments: int = 0x00
+        self._dp: bool = False
         self.setMinimumSize(50, 80)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
-    def set_segments(self, seg_byte: int):
-        """设置 7 段码 (0x00–0x7F)"""
+    # -- public API --------------------------------------------------------
+
+    def set_segments(self, seg_byte: int) -> None:
+        """Set the 7-segment code (0x00-0x7F).
+
+        Bit 0 = A (top), bit 1 = B (top-right), bit 2 = C (bottom-right),
+        bit 3 = D (bottom), bit 4 = E (bottom-left), bit 5 = F (top-left),
+        bit 6 = G (middle).
+        """
         self._segments = seg_byte & 0x7F
         self.update()
 
-    def set_dp(self, on: bool):
-        """设置小数点亮灭"""
+    def set_dp(self, on: bool) -> None:
+        """Turn the decimal point on or off."""
         self._dp = on
         self.update()
 
-    def paintEvent(self, event: QPaintEvent):
-        w = self.width()
-        h = self.height()
-        # 留出边距
-        margin = 4
-        seg_w = w - 2 * margin
-        seg_h = h - 2 * margin
+    # -- paint -------------------------------------------------------------
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N803
+        """Draw all seven segments and the decimal point."""
+        w: int = self.width()
+        h: int = self.height()
+
+        margin: int = 4
+        seg_w: float = float(w - 2 * margin)
+        seg_h: float = float(h - 2 * margin)
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # 背景
-        painter.fillRect(self.rect(), COLOR_BG)
+        # Background
+        painter.fillRect(self.rect(), _COLOR_BG)
 
-        # 缩放到实际像素
+        # Scale to unit square
         painter.save()
         painter.translate(margin, margin)
         painter.scale(seg_w, seg_h)
 
-        for bit, name in _SEG_MAP.items():
-            on = bool(self._segments & bit)
-            color = COLOR_ON if on else COLOR_OFF
+        painter.setPen(Qt.NoPen)
+
+        for bit_val, name in _SEGMENT_BIT_TO_NAME.items():
+            on: bool = bool(self._segments & bit_val)
+            color: QColor = _COLOR_ON if on else _COLOR_OFF
             painter.setBrush(QBrush(color))
-            painter.setPen(Qt.NoPen)
 
-            pts = _SEGMENTS.get(name, [])
-            if pts:
-                poly = QPolygonF([QPointF(x, y) for x, y in pts])
-                painter.drawPolygon(poly)
+            pts: list[tuple[float, float]] = _SEGMENT_POINTS.get(name, [])
+            if not pts:
+                continue
 
-        # 小数点
-        painter.setBrush(QBrush(COLOR_ON if self._dp else COLOR_OFF))
-        painter.drawEllipse(QPointF(0.92, 0.88), 0.06, 0.08)
+            path = QPainterPath()
+            path.moveTo(QPointF(*pts[0]))
+            for pt in pts[1:]:
+                path.lineTo(QPointF(*pt))
+            path.closeSubpath()
+            painter.drawPath(path)
+
+        # Decimal point — small filled ellipse
+        dp_color: QColor = _COLOR_ON if self._dp else _COLOR_OFF
+        painter.setBrush(QBrush(dp_color))
+        painter.drawEllipse(_DP_CENTER, _DP_RX, _DP_RY)
 
         painter.restore()
 
 
-# ═══════════════════════════════════════════════════════════════
-# LED 指示灯 Widget
-# ═══════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
+# LedIndicator — single LED circle with radial gradient
+# ---------------------------------------------------------------------------
 
 class LedIndicator(QWidget):
-    """单个 LED 指示灯 (QSS 径向渐变)"""
+    """A single LED indicator rendered as a radial-gradient circle.
 
-    def __init__(self, parent=None):
+    Public API:
+        set_on(on: bool)  -- turn the LED on or off
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._on = False
+        self._on: bool = False
         self.setFixedSize(20, 20)
 
-    def set_on(self, on: bool):
+    def set_on(self, on: bool) -> None:
+        """Set the LED state."""
         self._on = on
         self.update()
 
-    def paintEvent(self, event: QPaintEvent):
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N803
+        """Draw the LED as a radial-gradient filled circle."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
-        center = self.rect().center()
-        radius = min(self.width(), self.height()) / 2 - 2
+        center: QPointF = QRectF(self.rect()).center()
+        radius: float = min(self.width(), self.height()) / 2.0 - 2.0
 
+        gradient = QRadialGradient(center, radius)
         if self._on:
-            gradient = QRadialGradient(center, radius)
             gradient.setColorAt(0.0, QColor("#00FF00"))
             gradient.setColorAt(0.6, QColor("#00CC00"))
             gradient.setColorAt(1.0, QColor("#003300"))
         else:
-            gradient = QRadialGradient(center, radius)
             gradient.setColorAt(0.0, QColor("#444444"))
             gradient.setColorAt(1.0, QColor("#111111"))
 
@@ -158,100 +288,125 @@ class LedIndicator(QWidget):
         painter.drawEllipse(center, radius, radius)
 
 
-# ═══════════════════════════════════════════════════════════════
-# 数字孪生面板 (组合)
-# ═══════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
+# TwinPanel — full digital twin assembly
+# ---------------------------------------------------------------------------
 
-KEY_NAMES = ["FUNC", "SHIFT", "ADD", "SAVE", "DISP", "SPEED", "FORMAT", "EXT"]
+_KEY_NAMES: list[str] = [
+    "FUNC", "SHIFT", "ADD", "SAVE",
+    "DISP", "SPEED", "FORMAT", "EXT",
+]
 
 
 class TwinPanel(QWidget):
-    """数字孪生镜像面板 — 完整 S800 板面仿真"""
+    """Digital twin mirror panel — complete S800 board simulation.
 
-    virtual_key_pressed = pyqtSignal(str)  # 发送 "*SET:KEY <NAME>"
+    Layout (top to bottom):
+        1. Title label
+        2. 8 x SevenSegWidget in an HBox
+        3. 8 x LedIndicator in an HBox
+        4. 4x2 grid of K1-K8 buttons
+        5. USER1 / USER2 HBox
 
-    def __init__(self, parent=None):
+    Public signals:
+        virtual_key_pressed(str)  -- emitted on any virtual key click
+
+    Public methods:
+        update_display(chars: list[str], dp: int)  -- from *EVT:DISP
+        update_leds(pattern: int)                   -- from *EVT:LED
+        update_mode(state: str)                     -- from *EVT:MODE
+        highlight_key(name: str)                    -- from *EVT:KEY
+    """
+
+    virtual_key_pressed: pyqtSignal = pyqtSignal(str)
+
+    # Button highlight duration (ms)
+    _HIGHLIGHT_MS: ClassVar[int] = 200
+
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("MCU 镜像 (Digital Twin)")
+        self.setWindowTitle("MCU Mirror (Digital Twin)")
 
-        # 子控件
+        # Child widgets
         self.seg_widgets: list[SevenSegWidget] = []
         self.led_widgets: list[LedIndicator] = []
         self.key_buttons: list[QPushButton] = []
-        self.user1_btn: QPushButton | None = None
-        self.user2_btn: QPushButton | None = None
 
-        # 状态
-        self._night_mode = False
-        self._display_on = True
+        self.user1_btn: QPushButton
+        self.user2_btn: QPushButton
+
+        # Internal state
+        self._night_mode: bool = False
+        self._display_on: bool = True
+
+        # Active highlight timers (keyed by key name)
+        self._highlight_timers: dict[str, QTimer] = {}
 
         self._build_ui()
 
-        # 按键高亮定时器 (200ms)
-        self._highlight_timers: dict[str, QTimer] = {}
+    # ------------------------------------------------------------------
+    # UI construction
+    # ------------------------------------------------------------------
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
+        """Create and layout all child widgets."""
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(8, 8, 8, 8)
+        main_layout.setSpacing(8)
 
-        # ---- 标题 ----
-        title = QLabel("MCU 镜像 (Digital Twin)")
+        # -- Title --
+        title = QLabel("MCU Mirror (Digital Twin)")
         title.setAlignment(Qt.AlignCenter)
-        title.setFont(QFont("Microsoft YaHei", 12, QFont.Bold))
+        title_font = QFont("Microsoft YaHei", 12)
+        title_font.setBold(True)
+        title.setFont(title_font)
         main_layout.addWidget(title)
 
-        # ---- 7SEG 行 ----
+        # -- 7SEG row --
         seg_layout = QHBoxLayout()
         seg_layout.setSpacing(4)
-        for i in range(8):
+        for _ in range(8):
             seg = SevenSegWidget(self)
             seg.setFixedSize(58, 85)
             self.seg_widgets.append(seg)
             seg_layout.addWidget(seg, alignment=Qt.AlignCenter)
         main_layout.addLayout(seg_layout)
 
-        # ---- LED 行 ----
+        # -- LED row --
         led_layout = QHBoxLayout()
         led_layout.setSpacing(12)
-        for i in range(8):
+        for _ in range(8):
             led = LedIndicator(self)
             self.led_widgets.append(led)
             led_layout.addWidget(led, alignment=Qt.AlignCenter)
         main_layout.addLayout(led_layout)
 
-        # ---- 矩阵按键 K1-K8 (4×2 网格) ----
+        # -- Matrix keys K1-K8 (4x2 grid) --
         key_grid = QGridLayout()
         key_grid.setSpacing(6)
-        positions = [
+        positions: list[tuple[int, int]] = [
             (0, 0), (0, 1), (0, 2), (0, 3),  # K1-K4
             (1, 0), (1, 1), (1, 2), (1, 3),  # K5-K8
         ]
         for i, (row, col) in enumerate(positions):
-            btn = QPushButton(f"K{i+1}\n{KEY_NAMES[i]}")
+            name: str = _KEY_NAMES[i]
+            btn = QPushButton(f"K{i + 1}\n{name}")
             btn.setMinimumSize(70, 50)
             btn.setFont(QFont("Microsoft YaHei", 8))
-            btn.clicked.connect(lambda checked, n=KEY_NAMES[i]: self._on_key_clicked(n))
+            # Lambda default-argument captures `name` at definition time
+            btn.clicked.connect(lambda checked, n=name: self._on_key_clicked(n))
             key_grid.addWidget(btn, row, col)
             self.key_buttons.append(btn)
         main_layout.addLayout(key_grid)
 
-        # ---- USER1 / USER2 独立按键 ----
+        # -- USER1 / USER2 independent keys --
         user_layout = QHBoxLayout()
-        self.user1_btn = QPushButton("USER1\n(PJ0)")
-        self.user1_btn.setMinimumSize(140, 50)
-        self.user1_btn.setFont(QFont("Microsoft YaHei", 9, QFont.Bold))
-        self.user1_btn.setStyleSheet(
-            "QPushButton { background-color: #2A4A6B; color: white; border: 2px solid #4A8AD4; border-radius: 6px; }"
-            "QPushButton:hover { background-color: #3A5A7B; }"
-        )
+        user_layout.setSpacing(16)
+
+        self.user1_btn = self._make_user_button("USER1\n(PJ0)")
         self.user1_btn.clicked.connect(lambda: self._on_key_clicked("USER1"))
 
-        self.user2_btn = QPushButton("USER2\n(PJ1)")
-        self.user2_btn.setMinimumSize(140, 50)
-        self.user2_btn.setFont(QFont("Microsoft YaHei", 9, QFont.Bold))
-        self.user2_btn.setStyleSheet(
-            "QPushButton { background-color: #2A4A6B; color: white; border: 2px solid #4A8AD4; border-radius: 6px; }"
-            "QPushButton:hover { background-color: #3A5A7B; }"
-        )
+        self.user2_btn = self._make_user_button("USER2\n(PJ1)")
         self.user2_btn.clicked.connect(lambda: self._on_key_clicked("USER2"))
 
         user_layout.addWidget(self.user1_btn)
@@ -260,105 +415,151 @@ class TwinPanel(QWidget):
 
         main_layout.addStretch()
 
-    # ---- Public update methods (called from main window) ----
+    # ------------------------------------------------------------------
+    # Internal helpers for button creation
+    # ------------------------------------------------------------------
 
-    def update_display(self, chars: list[str], dp: int):
-        """根据 *EVT:DISP 更新 7SEG 显示"""
+    @staticmethod
+    def _make_user_button(text: str) -> QPushButton:
+        """Create a USER1/USER2 button with the standard blue styling."""
+        btn = QPushButton(text)
+        btn.setMinimumSize(140, 50)
+        btn.setFont(QFont("Microsoft YaHei", 9, QFont.Bold))
+        btn.setStyleSheet(
+            "QPushButton {"
+            "  background-color: #2A4A6B;"
+            "  color: white;"
+            "  border: 2px solid #4A8AD4;"
+            "  border-radius: 6px;"
+            "}"
+            "QPushButton:hover {"
+            "  background-color: #3A5A7B;"
+            "}"
+        )
+        return btn
+
+    # ------------------------------------------------------------------
+    # Public API — called from the main window when MCU events arrive
+    # ------------------------------------------------------------------
+
+    def update_display(self, chars: list[str], dp: int) -> None:
+        """Update all 8 seven-segment digits from an *EVT:DISP event.
+
+        Args:
+            chars: Exactly 8 display characters (e.g. ['1','2','.','3','0','.','4','5']).
+                   The decimal point is NOT included as a character.
+            dp: Two-digit hex bitmap (bit N = decimal point for digit N).
+        """
         self._display_on = True
         for i in range(8):
             if i < len(chars):
-                seg_byte = self._char_to_segments(chars[i])
+                seg_byte: int = self._char_to_segments(chars[i])
                 self.seg_widgets[i].set_segments(seg_byte)
                 self.seg_widgets[i].set_dp(bool(dp & (1 << i)))
             else:
                 self.seg_widgets[i].set_segments(0x00)
                 self.seg_widgets[i].set_dp(False)
 
-    def update_leds(self, pattern: int):
-        """根据 *EVT:LED <hex2> 更新 LED 亮灭"""
+        # Night-mode masking is applied on top if active
+        if self._night_mode:
+            self._apply_night_mask()
+
+    def update_leds(self, pattern: int) -> None:
+        """Update all 8 LEDs from an *EVT:LED event.
+
+        Args:
+            pattern: Byte where bit N controls LED N (0 = off, 1 = on).
+        """
         for i in range(8):
             self.led_widgets[i].set_on(bool(pattern & (1 << i)))
 
-    def update_mode(self, state: str):
-        """根据 *EVT:MODE 更新面板渲染模式"""
+        if self._night_mode:
+            self._apply_night_mask()
+
+    def update_mode(self, state: str) -> None:
+        """Update the panel rendering mode from an *EVT:MODE event.
+
+        Args:
+            state: "NIGHT" to enter night mode, anything else (e.g. "DAY",
+                   "FLOWING", "DATE", "TIME", "ALARM") to restore day mode.
+        """
         if state == "NIGHT":
             self._night_mode = True
-            self._apply_night_mode()
-        elif state == "DAY":
+            self._apply_night_mask()
+        else:
             self._night_mode = False
-            self._restore_day_mode()
 
-    def highlight_key(self, name: str):
-        """收到 *EVT:KEY 后高亮对应按键 200ms"""
-        btn = self._find_button(name)
+    def highlight_key(self, name: str) -> None:
+        """Flash a virtual key button gold for 200 ms.
+
+        Args:
+            name: One of the key names: FUNC, SHIFT, ADD, SAVE, DISP, SPEED,
+                  FORMAT, EXT, USER1, USER2.
+        """
+        btn: QPushButton | None = self._find_button(name)
         if btn is None:
             return
 
-        original_style = btn.styleSheet()
-        btn.setStyleSheet(
-            original_style
-            + " QPushButton { background-color: #FFD700; border: 2px solid #FFA500; }"
-        )
-
-        # 取消之前的定时器
+        # Cancel any still-running highlight timer for this key
         if name in self._highlight_timers:
             self._highlight_timers[name].stop()
 
+        original_style: str = btn.styleSheet()
+        btn.setStyleSheet(
+            original_style
+            + " QPushButton {"
+            "  background-color: #FFD700;"
+            "  border: 2px solid #FFA500;"
+            "}"
+        )
+
+        def restore() -> None:
+            btn.setStyleSheet(original_style)
+            self._highlight_timers.pop(name, None)
+
         timer = QTimer(self)
         timer.setSingleShot(True)
-        timer.timeout.connect(lambda: self._restore_button_style(btn, original_style, name))
+        timer.timeout.connect(restore)
         self._highlight_timers[name] = timer
-        timer.start(200)
+        timer.start(self._HIGHLIGHT_MS)
 
-    # ---- Internal helpers ----
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
 
-    def _on_key_clicked(self, name: str):
-        """虚拟按键点击 → 发出 *SET:KEY 命令"""
+    def _on_key_clicked(self, name: str) -> None:
+        """Handle a virtual key click.
+
+        Emit the *SET:KEY command string and visually highlight the key.
+        """
         self.virtual_key_pressed.emit(f"*SET:KEY {name}")
-        # 同时也高亮自身
         self.highlight_key(name)
 
     def _find_button(self, name: str) -> QPushButton | None:
-        if name in KEY_NAMES:
-            idx = KEY_NAMES.index(name)
-            return self.key_buttons[idx]
+        """Look up a QPushButton by key name."""
+        if name in _KEY_NAMES:
+            idx: int = _KEY_NAMES.index(name)
+            if idx < len(self.key_buttons):
+                return self.key_buttons[idx]
         if name == "USER1":
             return self.user1_btn
         if name == "USER2":
             return self.user2_btn
         return None
 
-    def _restore_button_style(self, btn: QPushButton, style: str, name: str):
-        btn.setStyleSheet(style)
-        if name in self._highlight_timers:
-            del self._highlight_timers[name]
-
-    def _apply_night_mode(self):
-        """夜间模式: 仅显示 4 位时分 + LED0 心跳"""
-        # 只留前 4 位 (HH.MM)
+    def _apply_night_mask(self) -> None:
+        """Blank digits 4-7 and LEDs 1-7 for night mode."""
         for i in range(4, 8):
             self.seg_widgets[i].set_segments(0x00)
             self.seg_widgets[i].set_dp(False)
-        # 仅 LED0 亮
         for i in range(1, 8):
             self.led_widgets[i].set_on(False)
 
-    def _restore_day_mode(self):
-        """日间模式: 恢复完整 8 位 + 全部 LED"""
-        pass  # 等待下一次 *EVT:DISP / *EVT:LED 刷新
-
     @staticmethod
     def _char_to_segments(ch: str) -> int:
-        """字符 → 7 段码 (标准共阳码表)"""
-        mapping = {
-            '0': 0x3F, '1': 0x06, '2': 0x5B, '3': 0x4F,
-            '4': 0x66, '5': 0x6D, '6': 0x7D, '7': 0x07,
-            '8': 0x7F, '9': 0x6F,
-            'A': 0x77, 'B': 0x7C, 'C': 0x39, 'D': 0x5E,
-            'E': 0x79, 'F': 0x71,
-            '-': 0x40, '_': 0x00, ' ': 0x00,
-            'x': 0x00, 'X': 0x76,
-            'H': 0x76, 'L': 0x38, 'P': 0x73,
-        }
-        ch_upper = ch.upper()
-        return mapping.get(ch_upper, 0x00)
+        """Convert an ASCII character to its 7-segment code.
+
+        Returns 0x00 for unrecognised characters.
+        """
+        ch_upper: str = ch.upper()
+        return _ASCII_TO_7SEG.get(ch_upper, 0x00)

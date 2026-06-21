@@ -6,7 +6,7 @@
 关键:
 - timeout=0.1 + ring buffer，绝不阻塞 GUI 线程
 - 所有 UI 通信通过 pyqtSignal
-- Windows: COM>9 需 \\\\.\\COMxx 格式
+- Windows: pyserial (≥3.0) 原生支持 COM>9，无需 \\\\.\\ 前缀
 """
 
 from PyQt5.QtCore import QThread, pyqtSignal, QMutex, QMutexLocker
@@ -22,6 +22,7 @@ class SerialWorker(QThread):
     line_received = pyqtSignal(str)        # 收到一个完整行 (已去换行符)
     connection_changed = pyqtSignal(bool)  # True=已连接, False=已断开
     latency_updated = pyqtSignal(int)      # 往返延迟 (ms)
+    port_list_updated = pyqtSignal(list)   # COM 口列表更新
 
     def __init__(self):
         super().__init__()
@@ -50,9 +51,14 @@ class SerialWorker(QThread):
         """扫描并返回可用 COM 口列表"""
         ports = serial.tools.list_ports.comports()
         result = [p.device for p in ports]
-        # Windows COM>9 需要特殊前缀
-        # pyserial 的 list_ports 通常已经返回了正确的名称
+        # Windows: pyserial (≥3.0) handles COM>9 natively —
+        # list_ports already returns "COM10" etc., no \\\\.\\ prefix needed.
         return result
+
+    def scan_ports(self):
+        """扫描 COM 口并通过信号通知 UI（线程安全，可从主线程调用）"""
+        ports = self.available_ports()
+        self.port_list_updated.emit(ports)
 
     def connect_to(self, port: str) -> bool:
         """连接到指定 COM 口"""
@@ -169,7 +175,12 @@ class SerialWorker(QThread):
         self.line_received.emit(line)
 
     def _check_heartbeat(self):
-        """1 Hz PING / 3s PONG 超时检测"""
+        """1 Hz PING / 3s PONG 超时检测
+
+        仅在确实发送了 PING 且等待 PONG 超时时才判定断连，
+        防止 _read_available 刚收到 PONG 但 last_pong_time
+        尚未刷新的竞态窗口误判。
+        """
         now = time.monotonic()
 
         # 发送 PING
@@ -183,12 +194,13 @@ class SerialWorker(QThread):
                 except serial.SerialException:
                     pass
 
-        # 检查 PONG 超时
-        if self._connected and (now - self._last_pong_time > self.PONG_TIMEOUT_S):
+        # 检查 PONG 超时：仅当 PING 待回复且超时才判定断连
+        if self._connected and self._ping_pending and (now - self._last_pong_time > self.PONG_TIMEOUT_S):
             self._connected = False
+            self._ping_pending = False
             self.connection_changed.emit(False)
 
-        # 恢复检测
+        # 恢复检测：已断连但最近收到了 PONG 则恢复连接
         if not self._connected and (now - self._last_pong_time <= self.PONG_TIMEOUT_S):
             self._connected = True
             self.connection_changed.emit(True)
@@ -202,5 +214,6 @@ class SerialWorker(QThread):
                 pass
         self.serial = None
         self._connected = False
+        self._ping_pending = False
         self._rx_buffer = b""
         self.connection_changed.emit(False)

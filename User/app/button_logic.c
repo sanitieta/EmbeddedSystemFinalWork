@@ -231,7 +231,6 @@ static void SaveCurrentSettingsAndExit(void)
             g.clock.year = g.clock.temp_year;
             g.clock.month = g.clock.temp_month;
             g.clock.day = g.clock.temp_day;
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SAVE: Date saved.\r\n");
             {
                 uint8_t v[11];
                 v[0] = (uint8_t)(g.clock.year / 1000 % 10) + '0';
@@ -251,7 +250,7 @@ static void SaveCurrentSettingsAndExit(void)
             g.clock.year = g.clock.original_year;
             g.clock.month = g.clock.original_month;
             g.clock.day = g.clock.original_day;
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SAVE: Invalid date, reverted.\r\n");
+            /* invalid date — reverted silently */
         }
     }
     else if (g.disp.mode == MODE_TIME_SET)
@@ -261,7 +260,6 @@ static void SaveCurrentSettingsAndExit(void)
             g.clock.hh = g.clock.temp_hh;
             g.clock.mm = g.clock.temp_mm;
             g.clock.ss = g.clock.temp_ss;
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SAVE: Time saved.\r\n");
             {
                 uint8_t v[9];
                 v[0] = (uint8_t)(g.clock.hh / 10) + '0';
@@ -279,7 +277,7 @@ static void SaveCurrentSettingsAndExit(void)
             g.clock.hh = g.clock.original_hh;
             g.clock.mm = g.clock.original_mm;
             g.clock.ss = g.clock.original_ss;
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SAVE: Invalid time, reverted.\r\n");
+            /* invalid time — reverted silently */
         }
     }
     else if (g.disp.mode == MODE_ALARM_SET)
@@ -291,7 +289,7 @@ static void SaveCurrentSettingsAndExit(void)
             g.clock.alm_mm = 0;
             g.clock.alm_ss = 0;
             StopAlarmRinging(false);
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SAVE: Alarm kept unset.\r\n");
+            /* alarm kept unset */
         }
         else if (is_valid_time(g.clock.temp_alm_hh, g.clock.temp_alm_mm, g.clock.temp_alm_ss))
         {
@@ -299,7 +297,6 @@ static void SaveCurrentSettingsAndExit(void)
             g.clock.alm_mm = g.clock.temp_alm_mm;
             g.clock.alm_ss = g.clock.temp_alm_ss;
             StopAlarmRinging(false);
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SAVE: Alarm saved.\r\n");
             {
                 uint8_t v[9];
                 v[0] = (uint8_t)(g.clock.alm_hh / 10) + '0';
@@ -317,12 +314,12 @@ static void SaveCurrentSettingsAndExit(void)
             g.clock.alm_hh = g.clock.original_alm_hh;
             g.clock.alm_mm = g.clock.original_alm_mm;
             g.clock.alm_ss = g.clock.original_alm_ss;
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SAVE: Invalid alarm, reverted.\r\n");
+            /* invalid alarm — reverted silently */
         }
     }
     else
     {
-        UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"SAVE: Current settings saved.\r\n");
+        /* generic save — no structured edit event needed */
     }
 
     g.clock.original_year = g.clock.year;

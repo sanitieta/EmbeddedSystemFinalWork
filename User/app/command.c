@@ -412,6 +412,10 @@ void ProcessUartCommand(void)
             ResetProtocolState();
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
         }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
+        }
     }
 
     // 处理 "*SET:DATE" 命令 (设置日期)
@@ -565,6 +569,10 @@ void ProcessUartCommand(void)
             Display_SendEditEvent("DATE", v);
             UpdateTimeAndDisplayBuffers();
         }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid parameter\r\n");
+        }
     }
 
     // 处理 "*SET:TIME" 命令 (设置时间)
@@ -696,6 +704,10 @@ void ProcessUartCommand(void)
             v[8] = '\0';
             Display_SendEditEvent("TIME", v);
             UpdateTimeAndDisplayBuffers();
+        }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid parameter\r\n");
         }
     }
 
@@ -830,6 +842,10 @@ void ProcessUartCommand(void)
             Display_SendEditEvent("ALARM", v);
             UpdateTimeAndDisplayBuffers();
         }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid parameter\r\n");
+        }
     }
 
     // 处理 "*SET:DISPLAY" 命令 (设置显示开关)
@@ -857,10 +873,12 @@ void ProcessUartCommand(void)
             }
             else // 无效参数
             {
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid parameter\r\n");
             }
         }
         else // 命令格式错误
         {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
         }
     }
 
@@ -885,6 +903,14 @@ void ProcessUartCommand(void)
                 Display_SendEvent();
                 g.clock.unsaved_changes_active = false;
             }
+            else
+            {
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid parameter\r\n");
+            }
+        }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
         }
     }
 
@@ -909,6 +935,7 @@ void ProcessUartCommand(void)
         }
         else
         {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
         }
     }
 
@@ -935,6 +962,7 @@ void ProcessUartCommand(void)
         }
         else
         {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid parameter\r\n");
         }
     }
 
@@ -966,10 +994,12 @@ void ProcessUartCommand(void)
             }
             else
             {
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid parameter\r\n");
             }
         }
         else
         {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
         }
     }
 
@@ -996,6 +1026,14 @@ void ProcessUartCommand(void)
                 g.in.short_evt[7] = true;          // K8
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
             }
+            else
+            {
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid parameter\r\n");
+            }
+        }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
         }
     }
 
@@ -1012,6 +1050,7 @@ void ProcessUartCommand(void)
         }
         else // 根据指定字段返回信息
         {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK ");
             for (i = field_token_idx; i < g.uart.num_tokens; ++i)
             {
                 if (compareFieldKeyword(&g.uart.tokens[i], "YEAR", 3)) // "YEAR"
@@ -1035,12 +1074,9 @@ void ProcessUartCommand(void)
                     found_arg = true;
                 }
             }
-        }
-        if (!found_arg) // 如果没有找到有效参数
-        {
-        }
-        else
-        {
+            if (!found_arg)
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid parameter");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
         }
     }
 
@@ -1058,36 +1094,31 @@ void ProcessUartCommand(void)
         }
         else // 根据指定字段返回信息
         {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK ");
             for (i = field_token_idx; i < g.uart.num_tokens; ++i)
             {
                 if (compareFieldKeyword(&g.uart.tokens[i], "HOUR", 3)) // "HOUR"
                 {
-                    
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.hh / 10) + '0');
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.hh % 10) + '0');
                     found_arg = true;
                 }
                 else if (compareFieldKeyword(&g.uart.tokens[i], "MINUTE", 3)) // "MINUTE"
                 {
-                    
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.mm / 10) + '0');
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.mm % 10) + '0');
                     found_arg = true;
                 }
                 else if (compareFieldKeyword(&g.uart.tokens[i], "SECOND", 3)) // "SECOND"
                 {
-                    
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.ss / 10) + '0');
                     UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.ss % 10) + '0');
                     found_arg = true;
                 }
             }
-        }
-        if (!found_arg) // 如果没有找到有效参数
-        {
-        }
-        else
-        {
+            if (!found_arg)
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid parameter");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
         }
     }
 
@@ -1098,6 +1129,10 @@ void ProcessUartCommand(void)
         {
             PutProtocolBuffer(g.disp.alarm_buf, 8);
         }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
+        }
     }
 
     // 处理 "*GET:FORMAT" 命令 (获取显示格式)
@@ -1105,7 +1140,11 @@ void ProcessUartCommand(void)
     {
         if (g.uart.num_tokens == current_param_idx) // 确保没有额外参数
         {
-            UARTStringPutNOBlocking(UART0_BASE, g.disp.shift_mode ? (uint8_t *)"RIGHT\r\n" : (uint8_t *)"LEFT\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, g.disp.shift_mode ? (uint8_t *)"OK RIGHT\r\n" : (uint8_t *)"OK LEFT\r\n");
+        }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
         }
     }
 
@@ -1114,7 +1153,11 @@ void ProcessUartCommand(void)
     {
         if (g.uart.num_tokens == current_param_idx) // 确保没有额外参数
         {
-            UARTStringPutNOBlocking(UART0_BASE, g.disp.on ? (uint8_t *)"ON\r\n" : (uint8_t *)"OFF\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, g.disp.on ? (uint8_t *)"OK ON\r\n" : (uint8_t *)"OK OFF\r\n");
+        }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
         }
     }
 
@@ -1124,9 +1167,11 @@ void ProcessUartCommand(void)
         if (g.uart.num_tokens == current_param_idx)
         {
             g.motor.running = 1;
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
         }
         else
         {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
         }
     }
 
@@ -1136,9 +1181,11 @@ void ProcessUartCommand(void)
         if (g.uart.num_tokens == current_param_idx)
         {
             g.motor.running = 0;
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
         }
         else
         {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
         }
     }
 
@@ -1148,9 +1195,11 @@ void ProcessUartCommand(void)
         if (g.uart.num_tokens == current_param_idx)
         {
             g.motor.direction = 0;
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
         }
         else
         {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
         }
     }
 
@@ -1160,9 +1209,11 @@ void ProcessUartCommand(void)
         if (g.uart.num_tokens == current_param_idx)
         {
             g.motor.direction = 1;
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
         }
         else
         {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
         }
     }
 
@@ -1171,6 +1222,7 @@ void ProcessUartCommand(void)
     {
         if (g.uart.num_tokens == current_param_idx)
         {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK ");
             UARTStringPutNOBlocking(UART0_BASE, g.motor.running ? (uint8_t *)"1" : (uint8_t *)"0");
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)" ");
             UARTStringPutNOBlocking(UART0_BASE, g.motor.direction ? (uint8_t *)"1" : (uint8_t *)"0");
@@ -1178,6 +1230,7 @@ void ProcessUartCommand(void)
         }
         else
         {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
         }
     }
 
@@ -1186,6 +1239,8 @@ void ProcessUartCommand(void)
     {
         if (g.uart.num_tokens == current_param_idx)
             SysCtlReset(); // 系统复位
+        else
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
     }
 
     // 处理 "*PING" 命令 (连接保活)
@@ -1234,12 +1289,14 @@ void ProcessUartCommand(void)
         }
         else
         {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
         }
     }
     else // 未知命令
     {
         if (g.uart.num_tokens > 0)
         {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Unknown command\r\n");
         }
     }
 

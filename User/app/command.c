@@ -115,7 +115,7 @@ static uint8_t FindRawPayloadOffset(uint8_t token_idx)
 
     for (i = 0; i < g.uart.rx_len; ++i)
     {
-        if (g.uart.rx_buf[i] != ' ')
+        if (g.uart.rx_buf[i] != ' ' && g.uart.rx_buf[i] != '\t')
         {
             if (!in_token)
             {
@@ -314,8 +314,8 @@ static void ParseUartInput(void)
 
     i = 0;
 
-    // 跳过开头的空格
-    while (i < g.uart.rx_len && g.uart.rx_buf[i] == ' ')
+    // 跳过开头的空格/Tab
+    while (i < g.uart.rx_len && (g.uart.rx_buf[i] == ' ' || g.uart.rx_buf[i] == '\t'))
     {
         i++;
     }
@@ -323,7 +323,7 @@ static void ParseUartInput(void)
     // 遍历接收缓冲区，解析Token
     while (i < g.uart.rx_len && g.uart.num_tokens < MAX_COMMAND_TOKENS)
     {
-        if (g.uart.rx_buf[i] != ' ') // 如果当前字符不是空格
+        if (g.uart.rx_buf[i] != ' ' && g.uart.rx_buf[i] != '\t') // 如果当前字符不是空格/Tab
         {
             if (!in_token) // 如果不在Token中，开始一个新Token
             {
@@ -337,7 +337,7 @@ static void ParseUartInput(void)
                 current_token_len++;
             }
         }
-        else // 如果当前字符是空格
+        else // 如果当前字符是空格/Tab
         {
             if (in_token) // 如果在Token中，则当前Token结束
             {
@@ -346,8 +346,8 @@ static void ParseUartInput(void)
                 g.uart.num_tokens++;                                                  // 增加Token数量
                 in_token = false;                                                     // 退出Token状态
             }
-            // 跳过连续的空格
-            while (i + 1 < g.uart.rx_len && g.uart.rx_buf[i + 1] == ' ')
+            // 跳过连续的空格/Tab
+            while (i + 1 < g.uart.rx_len && (g.uart.rx_buf[i + 1] == ' ' || g.uart.rx_buf[i + 1] == '\t'))
             {
                 i++;
             }

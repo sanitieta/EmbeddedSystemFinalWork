@@ -183,11 +183,11 @@ class SerialWorker(QThread):
     def _process_line(self, line: str):
         """处理收到的一行文本"""
         self._any_data_received = True
-        # PONG 检测
+        # 任何 MCU 数据都表示连接存活，刷新心跳时间戳
+        self._last_pong_time = time.monotonic()
+        # *PONG 检测（用于 RTT 测量）
         if line.startswith("*PONG"):
             self._ping_pending = False
-            self._last_pong_time = time.monotonic()
-            # 计算 RTT
             rtt_ms = int((time.monotonic() - self._ping_send_time) * 1000)
             self.latency_updated.emit(rtt_ms)
 

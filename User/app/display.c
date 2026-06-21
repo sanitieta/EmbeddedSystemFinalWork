@@ -380,6 +380,18 @@ void Display_SendModeEvent(const char *state)
     g.disp.uart_activity_until = g.timer.tick + UART_ACTIVITY_FLASH_MS;
 }
 
+void Display_SendEditEvent(const char *type, const uint8_t *value)
+{
+    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:EDIT ");
+    while (*type)
+        UARTCharPutBlocking(UART0_BASE, (uint8_t)(*type++));
+    UARTCharPutBlocking(UART0_BASE, ' ');
+    while (*value)
+        UARTCharPutBlocking(UART0_BASE, *value++);
+    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
+    g.disp.uart_activity_until = g.timer.tick + UART_ACTIVITY_FLASH_MS;
+}
+
 void Display_StartMessage(const uint8_t *text, uint8_t len)
 {
     if (len > 32)

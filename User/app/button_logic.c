@@ -37,7 +37,6 @@ static void ToggleDisplayFormat(void);
 static void HandleButtonShortPress(uint8_t button_num);
 static void HandleButtonLongPress(uint8_t button_num);
 static void HandleButtonIncrement(bool is_long_press_repeat);
-static void SendEditEvent(const char *type, const uint8_t *value);
 
 static bool alarm_was_unset_before_edit = false; // 记录进入闹钟编辑前是否未设置
 
@@ -189,33 +188,6 @@ static void CycleSettingField(void)
     g.disp.on = true;
 }
 
-/* 构建 *EVT:EDIT <TYPE> <VALUE>\r\n 报文并发送 (避免 sprintf) */
-static void SendEditEvent(const char *type, const uint8_t *value)
-{
-    uint8_t buf[40];
-    uint8_t pos = 0;
-
-    /* "*EVT:EDIT " */
-    buf[pos++] = '*'; buf[pos++] = 'E'; buf[pos++] = 'V'; buf[pos++] = 'T';
-    buf[pos++] = ':'; buf[pos++] = 'E'; buf[pos++] = 'D'; buf[pos++] = 'I';
-    buf[pos++] = 'T'; buf[pos++] = ' ';
-
-    /* TYPE */
-    while (*type) buf[pos++] = (uint8_t)(*type++);
-
-    /* space + VALUE */
-    buf[pos++] = ' ';
-    while (*value) buf[pos++] = *value++;
-
-    /* CR+LF */
-    buf[pos++] = '\r';
-    buf[pos++] = '\n';
-    buf[pos] = '\0';
-
-    UARTStringPutNOBlocking(UART0_BASE, buf);
-    g.disp.uart_activity_until = g.timer.tick + UART_ACTIVITY_FLASH_MS;
-}
-
 static void SaveCurrentSettingsAndExit(void)
 {
     bool restore_flow_state = (g.disp.mode != MODE_FLOWING);
@@ -238,7 +210,7 @@ static void SaveCurrentSettingsAndExit(void)
                 v[7] = '.'; v[8] = (uint8_t)(g.clock.day / 10) + '0';
                 v[9] = (uint8_t)(g.clock.day % 10) + '0';
                 v[10] = '\0';
-                SendEditEvent("DATE", v);
+                Display_SendEditEvent("DATE", v);
             }
         }
         else
@@ -265,7 +237,7 @@ static void SaveCurrentSettingsAndExit(void)
                 v[5] = '.'; v[6] = (uint8_t)(g.clock.ss / 10) + '0';
                 v[7] = (uint8_t)(g.clock.ss % 10) + '0';
                 v[8] = '\0';
-                SendEditEvent("TIME", v);
+                Display_SendEditEvent("TIME", v);
             }
         }
         else
@@ -302,7 +274,7 @@ static void SaveCurrentSettingsAndExit(void)
                 v[5] = '.'; v[6] = (uint8_t)(g.clock.alm_ss / 10) + '0';
                 v[7] = (uint8_t)(g.clock.alm_ss % 10) + '0';
                 v[8] = '\0';
-                SendEditEvent("ALARM", v);
+                Display_SendEditEvent("ALARM", v);
             }
         }
         else

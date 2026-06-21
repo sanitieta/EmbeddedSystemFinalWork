@@ -9,6 +9,7 @@ void Display_StopMessage(void);
 void Display_SendEvent(void);
 void Display_SendLedEvent(void);
 void Display_SendModeEvent(const char *state);
+void Display_SendEditEvent(const char *type, const uint8_t *value);
 void Display_SetLedOutput(uint8_t led_pattern);
 void Display_UpdateStatusLeds(void);
 void Display_FormatBufferForProtocol(const uint8_t *src, uint8_t len, uint8_t *dst);

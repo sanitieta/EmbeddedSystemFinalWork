@@ -79,6 +79,9 @@ static void PutProtocolBuffer(const uint8_t *buffer, uint8_t len)
     normalized[len] = '\0';
 
     Display_FormatBufferForProtocol(normalized, len, formatted);
+    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK ");
+    UARTStringPutNOBlocking(UART0_BASE, formatted);
+    UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
 }
 
 static void ResetProtocolState(void)
@@ -398,7 +401,7 @@ void ProcessUartCommand(void)
         if (g.uart.num_tokens == current_param_idx) // 确保没有额外参数
         {
             ResetProtocolState();
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:RST\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
         }
     }
 
@@ -535,10 +538,22 @@ void ProcessUartCommand(void)
 
         if (parse_ok) // 如果解析成功，保存原始值并发送成功消息
         {
+            uint8_t v[11];
             g.clock.original_year = g.clock.year;
             g.clock.original_month = g.clock.month;
             g.clock.original_day = g.clock.day;
             g.clock.unsaved_changes_active = false;
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
+            v[0] = (uint8_t)(g.clock.year / 1000 % 10) + '0';
+            v[1] = (uint8_t)(g.clock.year / 100 % 10) + '0';
+            v[2] = (uint8_t)(g.clock.year / 10 % 10) + '0';
+            v[3] = (uint8_t)(g.clock.year % 10) + '0';
+            v[4] = '.'; v[5] = (uint8_t)(g.clock.month / 10) + '0';
+            v[6] = (uint8_t)(g.clock.month % 10) + '0';
+            v[7] = '.'; v[8] = (uint8_t)(g.clock.day / 10) + '0';
+            v[9] = (uint8_t)(g.clock.day % 10) + '0';
+            v[10] = '\0';
+            Display_SendEditEvent("DATE", v);
             UpdateTimeAndDisplayBuffers();
         }
     }
@@ -657,10 +672,20 @@ void ProcessUartCommand(void)
 
         if (parse_ok) // 如果解析成功，保存原始值并发送成功消息
         {
+            uint8_t v[9];
             g.clock.original_hh = g.clock.hh;
             g.clock.original_mm = g.clock.mm;
             g.clock.original_ss = g.clock.ss;
             g.clock.unsaved_changes_active = false;
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
+            v[0] = (uint8_t)(g.clock.hh / 10) + '0';
+            v[1] = (uint8_t)(g.clock.hh % 10) + '0';
+            v[2] = '.'; v[3] = (uint8_t)(g.clock.mm / 10) + '0';
+            v[4] = (uint8_t)(g.clock.mm % 10) + '0';
+            v[5] = '.'; v[6] = (uint8_t)(g.clock.ss / 10) + '0';
+            v[7] = (uint8_t)(g.clock.ss % 10) + '0';
+            v[8] = '\0';
+            Display_SendEditEvent("TIME", v);
             UpdateTimeAndDisplayBuffers();
         }
     }
@@ -779,11 +804,21 @@ void ProcessUartCommand(void)
 
         if (parse_ok) // 如果解析成功，停止闹钟，保存原始值并发送成功消息
         {
+            uint8_t v[9];
             StopAlarmRinging(false);
             g.clock.original_alm_hh = g.clock.alm_hh;
             g.clock.original_alm_mm = g.clock.alm_mm;
             g.clock.original_alm_ss = g.clock.alm_ss;
             g.clock.unsaved_changes_active = false;
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
+            v[0] = (uint8_t)(g.clock.alm_hh / 10) + '0';
+            v[1] = (uint8_t)(g.clock.alm_hh % 10) + '0';
+            v[2] = '.'; v[3] = (uint8_t)(g.clock.alm_mm / 10) + '0';
+            v[4] = (uint8_t)(g.clock.alm_mm % 10) + '0';
+            v[5] = '.'; v[6] = (uint8_t)(g.clock.alm_ss / 10) + '0';
+            v[7] = (uint8_t)(g.clock.alm_ss % 10) + '0';
+            v[8] = '\0';
+            Display_SendEditEvent("ALARM", v);
             UpdateTimeAndDisplayBuffers();
         }
     }
@@ -798,6 +833,7 @@ void ProcessUartCommand(void)
                 g.disp.shifting = true;                 // 开启流动
                 g.disp.on = true; // 开启数码管显示
                 g.disp.msg_active = false;
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
                 Display_SendEvent();
                 g.clock.unsaved_changes_active = false;
             }
@@ -806,6 +842,7 @@ void ProcessUartCommand(void)
                 g.disp.shifting = false;                 // 停止流动
                 g.disp.on = false; // 关闭数码管显示
                 g.disp.msg_active = false;
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
                 Display_SendEvent();
                 g.clock.unsaved_changes_active = false;
             }
@@ -827,6 +864,7 @@ void ProcessUartCommand(void)
             {
                 g.disp.shift_mode = false;
                 g.disp.reversed = false;
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
                 Display_SendEvent();
                 g.clock.unsaved_changes_active = false;
             }
@@ -834,6 +872,7 @@ void ProcessUartCommand(void)
             {
                 g.disp.shift_mode = true;
                 g.disp.reversed = true;
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
                 Display_SendEvent();
                 g.clock.unsaved_changes_active = false;
             }
@@ -850,11 +889,14 @@ void ProcessUartCommand(void)
         {
             payload_offset = FindRawPayloadOffset(current_param_idx);
             payload_len = (uint8_t)(g.uart.rx_len - payload_offset);
+            /* 修剪尾部 \r \n */
+            while (payload_len > 0 && (g.uart.rx_buf[payload_offset + payload_len - 1U] == '\r' || g.uart.rx_buf[payload_offset + payload_len - 1U] == '\n'))
+                payload_len--;
             if (payload_len > 32)
                 payload_len = 32;
 
             Display_StartMessage(&g.uart.rx_buf[payload_offset], payload_len);
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:MSG\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
         }
         else
         {
@@ -872,13 +914,13 @@ void ProcessUartCommand(void)
             {
                 g.disp.led_takeover = false;
                 g.disp.led_pattern = 0x00;
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:LED DEFAULT\r\n");
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
             }
             else
             {
                 g.disp.led_takeover = true;
                 g.disp.led_pattern = led_value;
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:LED TAKEOVER\r\n");
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
             }
             Display_UpdateStatusLeds();
         }
@@ -901,7 +943,7 @@ void ProcessUartCommand(void)
                 if (g.disp.alarm_ring_start != 0)
                     g.disp.alarm_ringing = true;
                 Display_SendModeEvent("NIGHT");
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:MODE NIGHT\r\n");
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
                 Display_SendEvent();
                 Display_UpdateStatusLeds();
             }
@@ -909,7 +951,7 @@ void ProcessUartCommand(void)
             {
                 g.disp.night_mode = false;
                 Display_SendModeEvent("DAY");
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*OK:MODE DAY\r\n");
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
                 Display_SendEvent();
                 Display_UpdateStatusLeds();
             }
@@ -1111,8 +1153,8 @@ void ProcessUartCommand(void)
             SysCtlReset(); // 系统复位
     }
 
-    // 处理 "PING" 命令 (连接保活)
-    else if (compareTokens(&g.uart.tokens[0], "PING", 4))
+    // 处理 "*PING" 命令 (连接保活)
+    else if (compareTokens(&g.uart.tokens[0], "*PING", 5))
     {
         if (g.uart.num_tokens == current_param_idx)
         {

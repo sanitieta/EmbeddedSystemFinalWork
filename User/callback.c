@@ -43,11 +43,18 @@ void UART0_Handler(void)
         {
             if (g.uart.rx_len > 0) // 有内容
             {
-                g.uart.rx_buf[g.uart.rx_len] = '\0'; // 字符串结束符
-                if (g.uart.cmd_state == 0)
-                    g.uart.cmd_state = 1;            // 设置命令状态标志
-                /* 若 cmd_state 已为 1，说明缓冲区中已有未处理命令；
-                   新命令的 null 已放置，主循环将依次处理多条命令 */
+                if (g.uart.cmd_state == 0) // 第一条命令
+                {
+                    /* 正常路径使用 post-increment，rx_len 指向最后一个字符之后 */
+                    g.uart.rx_buf[g.uart.rx_len] = '\0';
+                    g.uart.cmd_state = 1;
+                }
+                else // 后续追加命令
+                {
+                    /* 追加路径使用 pre-increment，rx_len 指向最后一个字符；
+                       将 \0 放在最后一个字符之后，并推进 rx_len */
+                    g.uart.rx_buf[++g.uart.rx_len] = '\0';
+                }
             }
             continue; // 丢弃 \r \n 字符，不存入缓冲区
         }

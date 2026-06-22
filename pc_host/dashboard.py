@@ -10,6 +10,7 @@
 
 import os
 import csv
+import re
 from datetime import datetime
 from collections import defaultdict
 
@@ -25,7 +26,9 @@ except ImportError:
     FigureCanvas = None
     plt = None
 
-CSV_PATH = "logs/events.csv"
+CSV_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "logs", "events.csv"
+)
 CSV_HEADER = ["timestamp", "type", "field", "value"]
 
 
@@ -97,14 +100,33 @@ class Dashboard:
         """NTP 同步偏差时间序列"""
         deltas = []
         for e in self.load_events():
-            if e.get("type") == "SYNC" and e.get("value"):
+            if (
+                e.get("type") == "SYNC"
+                and e.get("field") == "NTP"
+                and e.get("value")
+            ):
                 try:
                     ts = datetime.fromisoformat(e["timestamp"])
-                    delta = float(e["value"])
+                    delta = self._parse_ntp_delta(e["value"])
+                    if delta is None:
+                        continue
                     deltas.append((ts, delta))
                 except (ValueError, KeyError):
                     pass
         return deltas
+
+    @staticmethod
+    def _parse_ntp_delta(value: str):
+        """解析新格式纯数值，并兼容旧版“偏差 +N ms”文本记录。"""
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            match = re.search(
+                r"偏差\s*([+-]?\d+(?:\.\d+)?)\s*ms",
+                str(value),
+                flags=re.IGNORECASE,
+            )
+            return float(match.group(1)) if match else None
 
     def get_key_heatmap(self) -> dict[str, int]:
         """按键按下频率统计"""

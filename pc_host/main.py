@@ -427,13 +427,18 @@ class MainWindow(QMainWindow):
         trigger = "USER1" if source == "USER1" else "手动"
         self.status_bar.showMessage(f"{trigger}触发 NTP 对时，正在获取标准时间…", 0)
 
-    def _on_ntp_sync_finished(self, ok: bool, msg: str, source: str):
+    def _on_ntp_sync_finished(
+        self, ok: bool, msg: str, source: str, offset_ms
+    ):
         """NTP 后台任务完成；该槽始终在 GUI 线程执行。"""
         self.btn_ntp.setEnabled(True)
         self.btn_ntp.setText("◷  NTP 对时")
         if ok:
             self.status_bar.showMessage(f"NTP: {msg}", 5000)
-            self.dashboard.log_event("SYNC", "NTP", msg)
+            if offset_ms is not None:
+                self.dashboard.log_event("SYNC", "NTP", str(offset_ms))
+                if self._dashboard_window is not None:
+                    self._dashboard_window.refresh_now()
         else:
             self.status_bar.showMessage(f"NTP: {msg}", 8000)
             self.log_panel.add_error(f"NTP: {msg}")

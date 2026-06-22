@@ -36,7 +36,8 @@ class NtpHelper(QObject):
 
     sync_started = pyqtSignal(str)              # source: manual / USER1
     command_ready = pyqtSignal(str)             # 交给 MainWindow 统一记录并发送
-    sync_finished = pyqtSignal(bool, str, str)  # success, message, source
+    sync_finished = pyqtSignal(bool, str, str, object)
+    # success, message, source, offset_ms (失败时为 None)
 
     def __init__(self, serial_worker, parent=None):
         super().__init__(parent)
@@ -80,9 +81,10 @@ class NtpHelper(QObject):
         success = False
         message = "NTP 对时失败"
         commands: list[str] = []
+        offset_ms: int | None = None
 
         try:
-            success, message, commands = self._perform_sync()
+            success, message, commands, offset_ms = self._perform_sync()
             if success:
                 for index, command in enumerate(commands):
                     self.command_ready.emit(command)
@@ -95,12 +97,12 @@ class NtpHelper(QObject):
         finally:
             with self._state_lock:
                 self._syncing = False
-            self.sync_finished.emit(success, message, source)
+            self.sync_finished.emit(success, message, source, offset_ms)
 
-    def _perform_sync(self) -> tuple[bool, str, list[str]]:
+    def _perform_sync(self) -> tuple[bool, str, list[str], int | None]:
         """执行网络请求和命令构建；该方法不触碰任何 QWidget。"""
         if not _HAS_NTPLIB or ntplib is None:
-            return False, "ntplib 未安装", []
+            return False, "ntplib 未安装", [], None
 
         response = None
         last_error: Exception | None = None
@@ -116,7 +118,7 @@ class NtpHelper(QObject):
                 last_error = exc
 
         if response is None:
-            return False, f"NTP 请求失败: {last_error}", []
+            return False, f"NTP 请求失败: {last_error}", [], None
 
         try:
             # ntplib 的 tx_time 已经是 Unix timestamp，不是 1900 epoch 秒数。
@@ -126,7 +128,7 @@ class NtpHelper(QObject):
             ).astimezone(BEIJING_TZ)
             offset_ms = int(round(float(response.offset) * 1000.0))
         except (AttributeError, OSError, OverflowError, TypeError, ValueError) as exc:
-            return False, f"NTP 响应无效: {exc}", []
+            return False, f"NTP 响应无效: {exc}", [], None
 
         self._last_sync_dt = beijing_time
         commands = [
@@ -144,4 +146,9 @@ class NtpHelper(QObject):
         ]
 
         stamp = beijing_time.strftime("%Y-%m-%d %H:%M:%S")
-        return True, f"同步成功 {stamp}（偏差 {offset_ms:+d} ms）", commands
+        return (
+            True,
+            f"同步成功 {stamp}（偏差 {offset_ms:+d} ms）",
+            commands,
+            offset_ms,
+        )

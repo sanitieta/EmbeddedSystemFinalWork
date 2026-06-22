@@ -52,7 +52,7 @@ static uint8_t SegmentForChar(uint8_t c)
     case 'B':
         return 0x7C;
     case 'C':
-        return 0x39;
+        return 0x58;
     case 'D':
         return 0x5E;
     case 'E':
@@ -92,7 +92,7 @@ static uint8_t SegmentForChar(uint8_t c)
     case 'Y':
         return 0x6E;
     case '-':
-        return 0x40;
+        return 0x5c;
     case '_':
     case ' ':
         return 0x00;

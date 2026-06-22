@@ -81,14 +81,42 @@ static void RestoreRtcOrDefaultTime(void)
 
 static void FinishBootSequence(void)
 {
+    /* ── 显示扫描/动画状态重置 ── */
     g.disp.init_flag = false;
+    g.disp.init_step = 0;
     g.disp.shift = 0;
     g.disp.rightshift = 0x01;
     g.disp.cnt = 0;
-    g.disp.init_step = 0;
-    g.disp.reversed = false;   // 确保开机正序
-    g.disp.shift_mode = false; // 确保开机左移
 
+    /* ── 显示模式：正序、左移、流动、时间 ── */
+    g.disp.reversed = false;
+    g.disp.shift_mode = false;
+    g.disp.shift_speed = false;
+    g.disp.mode = MODE_FLOWING;
+    g.disp.field = FIELD_NONE;
+    g.disp.main_disp = MAIN_DISPLAY_TIME;
+
+    /* ── 显示开关 ── */
+    g.disp.on = true;
+    g.disp.shifting = true;
+    g.disp.blinking = false;
+
+    /* ── 夜间模式 / LED 接管 ── */
+    g.disp.night_mode = false;
+    g.disp.led_takeover = false;
+    g.disp.led_pattern = 0x00;
+
+    /* ── 消息 / 保存闪烁 / 长按 ── */
+    g.disp.msg_active = false;
+    g.disp.msg_scroll = false;
+    g.disp.save_blink_active = false;
+    g.disp.long_press_saving = false;
+
+    /* ── 闹钟运行时状态 ── */
+    g.disp.alarm_ringing = false;
+    g.disp.alarm_beep_on = false;
+
+    /* ── 时钟原始值备份 (用于回滚) ── */
     g.clock.original_year = g.clock.year;
     g.clock.original_month = g.clock.month;
     g.clock.original_day = g.clock.day;
@@ -99,9 +127,7 @@ static void FinishBootSequence(void)
     g.clock.original_alm_mm = g.clock.alm_mm;
     g.clock.original_alm_ss = g.clock.alm_ss;
     g.clock.unsaved_changes_active = false;
-    g.disp.on = true;
-    g.disp.shifting = true;
-    g.disp.main_disp = MAIN_DISPLAY_TIME;
+
     UpdateTimeAndDisplayBuffers();
     Melody_Start();  // 开机旋律: See You Again
 }

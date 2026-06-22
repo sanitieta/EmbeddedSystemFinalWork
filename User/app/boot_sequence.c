@@ -86,6 +86,8 @@ static void FinishBootSequence(void)
     g.disp.rightshift = 0x01;
     g.disp.cnt = 0;
     g.disp.init_step = 0;
+    g.disp.reversed = false;   // 确保开机正序
+    g.disp.shift_mode = false; // 确保开机左移
 
     g.clock.original_year = g.clock.year;
     g.clock.original_month = g.clock.month;

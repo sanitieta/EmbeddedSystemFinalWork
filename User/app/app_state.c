@@ -20,10 +20,13 @@ app_state_t g = {
         .rightshift = 0x01,    // 位选从最低位开始扫描
         .on = true,            // 数码管默认开启
         .shifting = true,      // 流动显示默认启动
+        .shift_mode = false,   // 默认左移 (FORMAT LEFT)
+        .reversed = false,     // 默认正序显示
         .mode = MODE_FLOWING,  // 初始为流动显示模式
         .main_disp = MAIN_DISPLAY_FLOW, // 默认显示日期+时间交替流动
         .field = FIELD_NONE,   // 无编辑字段选中
         .prev_shifting = true, // 进入编辑前移位状态默认值
+        .prev_shift_mode = false, // 进入编辑前格式默认值
         .init_flag = true,     // 启动时进入初始化动画流程
     },
 

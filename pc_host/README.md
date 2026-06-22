@@ -21,7 +21,7 @@ python main.py
 
 ### 扩展功能 (选做 E1-E4)
 - **E1 NTP 对时**: 后台获取 aliyun/pool NTP 标准时间，按钮与 USER1 共用流程，成功后板端 LED4 常亮
-- **E2 天气获取**: wttr.in 免费 API, 30 分钟刷新, USER2 短显
+- **E2 天气获取**: Open-Meteo 主源 + wttr.in 备用，代理失败自动直连，后台刷新，USER2 短显
 - **E3 自动昼夜**: astral 计算日出日落, 自动 *SET:MODE DAY/NIGHT
 - **E4 可视化看板**: events.csv 持久化, 3 种 matplotlib 图表
 
@@ -40,6 +40,8 @@ pc_host/
 ├── log_panel.py           # 收发日志面板
 ├── ntp_helper.py          # NTP 对时助手
 ├── weather_helper.py      # 天气获取助手
+├── tests/
+│   └── test_weather_helper.py # 天气源/代理/缓存/LED 单元测试
 ├── auto_daynight.py       # 自动昼夜模式
 ├── dashboard.py           # 数据记录与可视化
 ├── ui/
@@ -63,3 +65,14 @@ pc_host/
 | requests | ≥2.28 | HTTP (天气) |
 | astral | ≥3.2 | 日出日落计算 |
 | matplotlib | ≥3.5 | 图表绘制 |
+
+## 天气容错
+
+- 默认查询上海 Open-Meteo，失败后自动切换 wttr.in。
+- 优先遵循系统 `HTTP_PROXY` / `HTTPS_PROXY`；发生代理或 TLS 握手错误时保持证书校验并尝试直连。
+- 两个实时源均不可用时，最近两小时内的成功结果可作为缓存继续用于 USER2 短显。
+- 所有请求在后台线程执行，不阻塞 Qt GUI。
+
+```powershell
+python -m unittest discover -s pc_host\tests -p "test_*.py" -v
+```

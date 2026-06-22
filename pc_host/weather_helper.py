@@ -11,8 +11,11 @@
 from __future__ import annotations
 
 import time
+import threading
 from dataclasses import dataclass
 from typing import Any, Callable
+
+from PyQt5.QtCore import QObject, pyqtSignal
 
 try:
     import requests
@@ -53,14 +56,22 @@ class WeatherProviderError(RuntimeError):
     """天气源请求或响应无效。"""
 
 
-class WeatherHelper:
+class WeatherHelper(QObject):
     """天气获取、缓存以及 MCU 消息/LED 编码。"""
 
-    def __init__(self, serial_worker):
+    fetch_started = pyqtSignal(str)              # source: manual / timer / initial / USER2
+    command_ready = pyqtSignal(str)              # 交给 MainWindow 统一记录并发送
+    fetch_finished = pyqtSignal(bool, str, str)  # success, message, source
+
+    def __init__(self, serial_worker, parent=None):
+        super().__init__(parent)
         self.serial_worker = serial_worker
         self.protocol = Protocol()
         self._snapshot: WeatherSnapshot | None = None
         self._last_fetch_time: float = 0.0
+        self._fetching = False
+        self._send_after_fetch = False
+        self._state_lock = threading.Lock()
 
         # 保留旧属性，兼容已有 UI/调试代码。
         self._temperature: int | None = None
@@ -71,12 +82,36 @@ class WeatherHelper:
         return self._snapshot is not None
 
     @property
+    def fetching(self) -> bool:
+        with self._state_lock:
+            return self._fetching
+
+    @property
     def snapshot(self) -> WeatherSnapshot | None:
         return self._snapshot
 
     def fetch_now(self) -> tuple[bool, str]:
-        """同步获取天气；下一提交会在 GUI 层把它移到后台线程。"""
+        """同步兼容入口；GUI 应使用 request_fetch()。"""
         return self._do_fetch()
+
+    def request_fetch(self, source: str = "manual", send_to_mcu: bool = False) -> bool:
+        """启动后台刷新；正在刷新时合并 USER2 的发送请求。"""
+        with self._state_lock:
+            if self._fetching:
+                self._send_after_fetch = self._send_after_fetch or send_to_mcu
+                return False
+            self._fetching = True
+            self._send_after_fetch = send_to_mcu
+
+        self.fetch_started.emit(source)
+        worker = threading.Thread(
+            target=self._run_fetch,
+            args=(source,),
+            name="s800-weather-fetch",
+            daemon=True,
+        )
+        worker.start()
+        return True
 
     def start_auto_refresh(self):
         """自动刷新由 MainWindow 的 QTimer 统一调度。"""
@@ -90,13 +125,44 @@ class WeatherHelper:
         if snapshot is None:
             return False
 
-        self.serial_worker.send_line(
+        self.command_ready.emit(
             self.protocol.build_set_msg(snapshot.mcu_message)
         )
-        self.serial_worker.send_line(
+        self.command_ready.emit(
             self.protocol.build_set_led(self._compute_weather_led())
         )
         return True
+
+    def send_status_led_to_mcu(self) -> bool:
+        """串口重连后恢复最近天气的 LED5-LED7 编码。"""
+        if self._snapshot is None:
+            return False
+        self.command_ready.emit(
+            self.protocol.build_set_led(self._compute_weather_led())
+        )
+        return True
+
+    def _run_fetch(self, source: str) -> None:
+        success = False
+        message = "天气刷新失败"
+        try:
+            success, message = self._do_fetch()
+            with self._state_lock:
+                send_after_fetch = self._send_after_fetch
+
+            if success:
+                if send_after_fetch:
+                    self.send_weather_to_mcu()
+                else:
+                    self.send_status_led_to_mcu()
+        except Exception as exc:
+            success = False
+            message = f"天气刷新异常: {self._short_error(exc)}"
+        finally:
+            with self._state_lock:
+                self._fetching = False
+                self._send_after_fetch = False
+            self.fetch_finished.emit(success, message, source)
 
     def _do_fetch(self) -> tuple[bool, str]:
         if not _HAS_REQUESTS or requests is None:
@@ -112,9 +178,6 @@ class WeatherHelper:
             try:
                 snapshot = fetcher()
                 self._apply_snapshot(snapshot)
-                self.serial_worker.send_line(
-                    self.protocol.build_set_led(self._compute_weather_led())
-                )
                 return True, snapshot.summary
             except WeatherProviderError as exc:
                 errors.append(f"{provider_name}: {exc}")

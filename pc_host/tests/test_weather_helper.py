@@ -1,4 +1,5 @@
 import sys
+import threading
 import unittest
 from pathlib import Path
 
@@ -6,6 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import weather_helper as module
+from PyQt5.QtCore import QCoreApplication, QEventLoop, QTimer
 from weather_helper import WeatherHelper, WeatherProviderError, WeatherSnapshot
 
 
@@ -29,9 +31,15 @@ class FakeResponse:
 
 
 class WeatherHelperTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QCoreApplication.instance() or QCoreApplication([])
+
     def setUp(self):
         self.serial = FakeSerialWorker()
         self.helper = WeatherHelper(self.serial)
+        self.commands = []
+        self.helper.command_ready.connect(self.commands.append)
 
     def test_open_meteo_mapping_and_led_encoding(self):
         snapshot = self.helper._parse_open_meteo({
@@ -83,7 +91,7 @@ class WeatherHelperTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIn("wttr.in", message)
         self.assertEqual(self.helper.snapshot.condition, "CLOUDY")
-        self.assertEqual(self.serial.lines, ["*SET:LED 00"])
+        self.assertEqual(self.commands, [])
 
     def test_recent_cache_survives_provider_outage(self):
         self.helper._apply_snapshot(WeatherSnapshot(18, "SUNNY", "晴", "cache"))
@@ -100,9 +108,38 @@ class WeatherHelperTests(unittest.TestCase):
 
         self.assertTrue(self.helper.send_weather_to_mcu())
         self.assertEqual(
-            self.serial.lines,
+            self.commands,
             ["*SET:MSG -3C SNOW", "*SET:LED 20"],
         )
+
+    def test_async_fetch_emits_led_and_restores_busy_state(self):
+        entered = threading.Event()
+        release = threading.Event()
+
+        def fake_fetch():
+            entered.set()
+            release.wait(1.0)
+            self.helper._apply_snapshot(
+                WeatherSnapshot(28, "SUNNY", "晴", "test")
+            )
+            return True, "28°C 晴 · test"
+
+        self.helper._do_fetch = fake_fetch
+        finished = []
+        loop = QEventLoop()
+        self.helper.fetch_finished.connect(lambda *args: finished.append(args))
+        self.helper.fetch_finished.connect(lambda *_: loop.quit())
+
+        self.assertTrue(self.helper.request_fetch("manual"))
+        self.assertTrue(entered.wait(1.0))
+        self.assertFalse(self.helper.request_fetch("timer"))
+        release.set()
+        QTimer.singleShot(2000, loop.quit)
+        loop.exec_()
+
+        self.assertEqual(self.commands, ["*SET:LED 80"])
+        self.assertTrue(finished and finished[0][0])
+        self.assertFalse(self.helper.fetching)
 
     @staticmethod
     def _raise_provider_error():

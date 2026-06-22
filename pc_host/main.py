@@ -59,7 +59,7 @@ class MainWindow(QMainWindow):
 
         # ---- 扩展功能模块 ----
         self.ntp_helper = NtpHelper(self.serial_worker, self)
-        self.weather_helper = WeatherHelper(self.serial_worker)
+        self.weather_helper = WeatherHelper(self.serial_worker, self)
         self.auto_daynight = AutoDayNight(self.serial_worker)
         self.dashboard = Dashboard()
 
@@ -166,7 +166,7 @@ class MainWindow(QMainWindow):
 
         self.btn_weather = QPushButton("☁  天气")
         self.btn_weather.setProperty("toolbarAction", True)
-        self.btn_weather.setToolTip("立即从 wttr.in 获取天气")
+        self.btn_weather.setToolTip("刷新上海天气（Open-Meteo / wttr.in 备用）")
         quick_row.addWidget(self.btn_weather)
 
         self.btn_dashboard = QPushButton("⌁  数据看板")
@@ -302,6 +302,9 @@ class MainWindow(QMainWindow):
         self.ntp_helper.command_ready.connect(self._on_send_command)
         self.ntp_helper.sync_started.connect(self._on_ntp_sync_started)
         self.ntp_helper.sync_finished.connect(self._on_ntp_sync_finished)
+        self.weather_helper.command_ready.connect(self._on_weather_command)
+        self.weather_helper.fetch_started.connect(self._on_weather_fetch_started)
+        self.weather_helper.fetch_finished.connect(self._on_weather_fetch_finished)
 
         # 工具栏按钮
         self.btn_refresh.clicked.connect(self._scan_ports)
@@ -413,26 +416,44 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "NTP 对时失败", msg)
 
     def _on_weather_fetch(self):
-        """手动刷新天气"""
-        ok, msg = self.weather_helper.fetch_now()
+        """手动刷新天气。"""
+        self._request_weather_fetch("manual")
+
+    def _request_weather_fetch(self, source: str, send_to_mcu: bool = False):
+        """启动异步天气刷新，合并重复请求。"""
+        if not self.weather_helper.request_fetch(source, send_to_mcu):
+            self.status_bar.showMessage("天气正在更新，请稍候", 3000)
+
+    def _on_weather_fetch_started(self, source: str):
+        """天气后台任务开始。"""
+        self.btn_weather.setEnabled(False)
+        self.btn_weather.setText("☁  更新中…")
+        if source in ("manual", "USER2"):
+            self.status_bar.showMessage("正在获取上海实时天气…", 0)
+
+    def _on_weather_fetch_finished(self, ok: bool, msg: str, source: str):
+        """天气后台任务完成。"""
+        self.btn_weather.setEnabled(True)
+        self.btn_weather.setText("☁  天气")
         if ok:
-            self.status_bar.showMessage(f"天气: {msg}", 5000)
+            prefix = "天气自动更新" if source == "timer" else "天气"
+            self.status_bar.showMessage(f"{prefix}: {msg}", 5000)
         else:
+            self.status_bar.showMessage(f"天气: {msg}", 8000)
             self.log_panel.add_error(f"天气: {msg}")
+
+    def _on_weather_command(self, line: str):
+        """仅在串口在线时记录并发送天气相关命令。"""
+        if self.serial_worker._connected:
+            self._on_send_command(line)
 
     def _weather_fetch_callback(self):
         """定时器回调：自动刷新天气"""
-        ok, msg = self.weather_helper.fetch_now()
-        if ok:
-            self.status_bar.showMessage(f"天气自动更新: {msg}", 3000)
+        self._request_weather_fetch("timer")
 
     def _initial_weather_fetch(self):
         """启动后首次拉取天气"""
-        ok, msg = self.weather_helper.fetch_now()
-        if ok:
-            self.status_bar.showMessage(f"天气: {msg}", 5000)
-        else:
-            self.log_panel.add_error(f"天气: {msg}")
+        self._request_weather_fetch("initial")
 
     def _on_dashboard(self):
         """切换数据看板的打开/关闭状态。"""
@@ -535,7 +556,8 @@ class MainWindow(QMainWindow):
 
             elif key_name == "USER2":
                 # E2: USER2 触发天气短显
-                self.weather_helper.send_weather_to_mcu()
+                if not self.weather_helper.send_weather_to_mcu():
+                    self._request_weather_fetch("USER2", send_to_mcu=True)
 
         elif etype == "MODE":
             state = event.get("state", "")
@@ -626,6 +648,7 @@ class MainWindow(QMainWindow):
             self._set_widget_state(self.conn_label, "online")
             self.btn_connect.setText("断开")
             self.btn_connect.setProperty("danger", True)
+            self.weather_helper.send_status_led_to_mcu()
         else:
             self.conn_label.setText("●  OFFLINE")
             self._set_widget_state(self.conn_label, "offline")

@@ -101,6 +101,32 @@ static uint8_t SegmentForChar(uint8_t c)
     }
 }
 
+/* 将 7 段码反向映射为 ASCII 字符 (用于流动显示 *EVT:DISP 上报) */
+static uint8_t CharForSegment(uint8_t seg)
+{
+    uint8_t base = seg & 0x7F;  /* 屏蔽 dp 位 */
+    uint8_t i;
+
+    if (base == 0x00)
+        return '_';
+
+    for (i = 0; i < 18; ++i)
+    {
+        if (g.disp.seg7[i] == base)
+        {
+            if (i <= 9)
+                return (uint8_t)('0' + i);
+            if (i >= 10 && i <= 15)
+                return (uint8_t)('A' + (uint8_t)(i - 10));
+            if (i == 16)
+                return '-';
+            if (i == 17)
+                return '_';
+        }
+    }
+    return '_';
+}
+
 /* 将 n 字符内容在 8 位缓冲区中居中 (左右各留余量) */
 static void CenterContent(uint8_t chars[8], uint8_t n, uint8_t *dp_hex)
 {
@@ -226,8 +252,22 @@ static void BuildCurrentDisplay(uint8_t chars[8], uint8_t *dp_hex)
         chars[7] = DigitToAscii((uint8_t)(g.clock.day % 10));
         *dp_hex = 0x28;
     }
+    else if (g.disp.main_disp == MAIN_DISPLAY_FLOW)
+    {
+        /* 流动模式: 取当前 8 位窗口的 7 段码，反向映射为 ASCII */
+        for (i = 0; i < 8; ++i)
+        {
+            uint8_t idx = ((uint8_t)g.disp.shift + i) % 18U;
+            uint8_t seg = g.disp.master_buf[idx];
+
+            chars[i] = CharForSegment(seg);
+            if (seg & 0x80)
+                *dp_hex |= (uint8_t)(1U << i);
+        }
+    }
     else
     {
+        /* MAIN_DISPLAY_TIME: 居中显示 HH.MM.SS */
         chars[0] = DigitToAscii((uint8_t)(g.clock.hh / 10));
         chars[1] = DigitToAscii((uint8_t)(g.clock.hh % 10));
         chars[2] = DigitToAscii((uint8_t)(g.clock.mm / 10));

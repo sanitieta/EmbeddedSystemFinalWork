@@ -41,16 +41,24 @@ void UART0_Handler(void)
 
         if (uart_receive_char == '\r' || uart_receive_char == '\n') // 如果是回车或换行，表示命令输入结束
         {
-            if (g.uart.rx_len > 0 && g.uart.cmd_state == 0) // 有内容且上一条命令已处理
+            if (g.uart.rx_len > 0) // 有内容
             {
                 g.uart.rx_buf[g.uart.rx_len] = '\0'; // 字符串结束符
-                g.uart.cmd_state = 1;                                // 设置命令状态标志
+                if (g.uart.cmd_state == 0)
+                    g.uart.cmd_state = 1;            // 设置命令状态标志
+                /* 若 cmd_state 已为 1，说明缓冲区中已有未处理命令；
+                   新命令的 null 已放置，主循环将依次处理多条命令 */
             }
             continue; // 丢弃 \r \n 字符，不存入缓冲区
         }
 
-        if (g.uart.cmd_state != 0) // 上一条命令尚未被主循环处理，排空 FIFO 防止追加到 null 之后
+        /* 若上一条命令尚未处理，新字符追加在 null 之后 (跳过 null) */
+        if (g.uart.cmd_state != 0)
         {
+            if (g.uart.rx_len < (sizeof(g.uart.rx_buf) - 2))
+            {
+                g.uart.rx_buf[++g.uart.rx_len] = uart_receive_char;
+            }
             continue;
         }
 

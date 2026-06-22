@@ -326,8 +326,8 @@ static void ParseUartInput(void)
         i++;
     }
 
-    // 遍历接收缓冲区，解析Token
-    while (i < g.uart.rx_len && g.uart.num_tokens < MAX_COMMAND_TOKENS)
+    // 遍历接收缓冲区，解析Token (遇到 null 则停止，仅处理第一条命令)
+    while (i < g.uart.rx_len && g.uart.rx_buf[i] != '\0' && g.uart.num_tokens < MAX_COMMAND_TOKENS)
     {
         if (g.uart.rx_buf[i] != ' ' && g.uart.rx_buf[i] != '\t') // 如果当前字符不是空格/Tab
         {
@@ -1463,6 +1463,23 @@ void ProcessUartCommand(void)
         }
     }
 
-    g.uart.rx_len = 0;                                        // 清空接收长度
-    memset(g.uart.rx_buf, 0, sizeof(g.uart.rx_buf)); // 清空接收缓冲区
+    /* 检查缓冲区中是否还有下一条命令 (紧接在 null 之后，由 ISR 连续接收) */
+    {
+        uint8_t pos = 0;
+        while (pos < g.uart.rx_len && g.uart.rx_buf[pos] != '\0')
+            pos++;
+        if (pos + 1U < g.uart.rx_len) /* 第一条命令的 null 之后还有数据 */
+        {
+            uint8_t tail = (uint8_t)(g.uart.rx_len - pos - 1U);
+            memmove(g.uart.rx_buf, &g.uart.rx_buf[pos + 1U], tail);
+            g.uart.rx_len = tail;
+            g.uart.cmd_state = 1; /* 下一条命令待处理 */
+            memset(&g.uart.rx_buf[tail], 0, sizeof(g.uart.rx_buf) - tail);
+        }
+        else
+        {
+            g.uart.rx_len = 0;
+            memset(g.uart.rx_buf, 0, sizeof(g.uart.rx_buf));
+        }
+    }
 }

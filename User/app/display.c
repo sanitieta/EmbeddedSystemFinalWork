@@ -443,7 +443,6 @@ void Display_StopMessage(void)
 void Update7SegmentDisplay(void)
 {
     uint8_t segment_data;                // 当前数码管段码
-    bool digit_should_blink_off = false; // 数字是否应该闪烁关闭
     uint8_t local_cnt;                   // 本地数码管计数
     uint8_t display_cnt;                 // 考虑FORMAT后的显示位置
     uint8_t effective_segment_data;      // 实际发送的段码
@@ -545,129 +544,94 @@ void Update7SegmentDisplay(void)
     }
     else if (g.disp.mode == MODE_DATE_SET) // 日期设置模式
     {
-        // 根据display_cnt显示年、月、日 (支持 FORMAT RIGHT)
-        if (display_cnt == 0)
-            segment_data = g.disp.seg7[(g.clock.temp_year / 1000) % 10];
-        else if (display_cnt == 1)
-            segment_data = g.disp.seg7[(g.clock.temp_year / 100) % 10];
-        else if (display_cnt == 2)
-            segment_data = g.disp.seg7[(g.clock.temp_year / 10) % 10];
-        else if (display_cnt == 3)
-            segment_data = g.disp.seg7[(g.clock.temp_year % 10)] | 0x80; // 年份末位带小数点
-        else if (display_cnt == 4)
-            segment_data = g.disp.seg7[g.clock.temp_month / 10];
-        else if (display_cnt == 5)
-            segment_data = g.disp.seg7[g.clock.temp_month % 10] | 0x80; // 月份末位带小数点
-        else if (display_cnt == 6)
-            segment_data = g.disp.seg7[g.clock.temp_day / 10];
-        else if (display_cnt == 7)
-            segment_data = g.disp.seg7[g.clock.temp_day % 10];
-        else
-            segment_data = 0x00; // 未使用数码管
-
-        // 处理闪烁效果
+        uint8_t pat[8];
+        pat[0] = g.disp.seg7[(g.clock.temp_year / 1000) % 10];
+        pat[1] = g.disp.seg7[(g.clock.temp_year / 100) % 10];
+        pat[2] = g.disp.seg7[(g.clock.temp_year / 10) % 10];
+        pat[3] = g.disp.seg7[(g.clock.temp_year % 10)] | 0x80;
+        pat[4] = g.disp.seg7[g.clock.temp_month / 10];
+        pat[5] = g.disp.seg7[g.clock.temp_month % 10] | 0x80;
+        pat[6] = g.disp.seg7[g.clock.temp_day / 10];
+        pat[7] = g.disp.seg7[g.clock.temp_day % 10];
+        segment_data = pat[display_cnt];
         if (g.disp.blinking && (g.timer.tick % (BLINK_ON_TIME_MS + BLINK_OFF_TIME_MS)) >= BLINK_ON_TIME_MS)
         {
-            // 根据当前设置字段，判断是否需要闪烁关闭
             if ((g.disp.field == FIELD_YEAR && display_cnt <= 3) ||
                 (g.disp.field == FIELD_MONTH && display_cnt >= 4 && display_cnt <= 5) ||
                 (g.disp.field == FIELD_DAY && display_cnt >= 6 && display_cnt <= 7))
             {
-                digit_should_blink_off = true;
+                segment_data = 0x00;
             }
         }
-        if (digit_should_blink_off)
-            segment_data = 0x00; // 闪烁关闭时显示空白
     }
     else if (g.disp.mode == MODE_TIME_SET) // 时间设置模式
     {
-        // 根据display_cnt显示时、分、秒 (支持 FORMAT RIGHT)
-        if (display_cnt == 0 || display_cnt == 7) // 两端空白
-            segment_data = 0x00;
-        else if (display_cnt == 1)
-            segment_data = g.disp.seg7[g.clock.temp_hh / 10];
-        else if (display_cnt == 2)
-            segment_data = g.disp.seg7[g.clock.temp_hh % 10] | 0x80; // 小时末位带小数点
-        else if (display_cnt == 3)
-            segment_data = g.disp.seg7[g.clock.temp_mm / 10];
-        else if (display_cnt == 4)
-            segment_data = g.disp.seg7[g.clock.temp_mm % 10] | 0x80; // 分钟末位带小数点
-        else if (display_cnt == 5)
-            segment_data = g.disp.seg7[g.clock.temp_ss / 10];
-        else if (display_cnt == 6)
-            segment_data = g.disp.seg7[g.clock.temp_ss % 10];
-        else
-            segment_data = 0x00; // 未使用数码管
-
-        // 处理闪烁效果
+        uint8_t pat[8];
+        pat[0] = 0x00;
+        pat[1] = g.disp.seg7[g.clock.temp_hh / 10];
+        pat[2] = g.disp.seg7[g.clock.temp_hh % 10] | 0x80;
+        pat[3] = g.disp.seg7[g.clock.temp_mm / 10];
+        pat[4] = g.disp.seg7[g.clock.temp_mm % 10] | 0x80;
+        pat[5] = g.disp.seg7[g.clock.temp_ss / 10];
+        pat[6] = g.disp.seg7[g.clock.temp_ss % 10];
+        pat[7] = 0x00;
+        segment_data = pat[display_cnt];
         if (g.disp.blinking && (g.timer.tick % (BLINK_ON_TIME_MS + BLINK_OFF_TIME_MS)) >= BLINK_ON_TIME_MS)
         {
-            // 根据当前设置字段，判断是否需要闪烁关闭
             if ((g.disp.field == FIELD_HOUR && display_cnt >= 1 && display_cnt <= 2) ||
                 (g.disp.field == FIELD_MINUTE && display_cnt >= 3 && display_cnt <= 4) ||
                 (g.disp.field == FIELD_SECOND && display_cnt >= 5 && display_cnt <= 6))
             {
-                digit_should_blink_off = true;
+                segment_data = 0x00;
             }
         }
-        if (digit_should_blink_off)
-            segment_data = 0x00; // 闪烁关闭时显示空白
     }
     else if (g.disp.mode == MODE_ALARM_SET) // 闹钟设置模式
     {
-        // 根据display_cnt显示闹钟时、分、秒 (支持 FORMAT RIGHT)
-        if (display_cnt == 0 || display_cnt == 7) // 两端空白
-            segment_data = 0x00;
-        else if (display_cnt == 1)
-            segment_data = g.disp.seg7[g.clock.temp_alm_hh / 10];
-        else if (display_cnt == 2)
-            segment_data = g.disp.seg7[g.clock.temp_alm_hh % 10] | 0x80; // 闹钟小时末位带小数点
-        else if (display_cnt == 3)
-            segment_data = g.disp.seg7[g.clock.temp_alm_mm / 10];
-        else if (display_cnt == 4)
-            segment_data = g.disp.seg7[g.clock.temp_alm_mm % 10] | 0x80; // 闹钟分钟末位带小数点
-        else if (display_cnt == 5)
-            segment_data = g.disp.seg7[g.clock.temp_alm_ss / 10];
-        else if (display_cnt == 6)
-            segment_data = g.disp.seg7[g.clock.temp_alm_ss % 10];
-        else
-            segment_data = 0x00; // 未使用数码管
-
-        // 处理闪烁效果
+        uint8_t pat[8];
+        pat[0] = 0x00;
+        pat[1] = g.disp.seg7[g.clock.temp_alm_hh / 10];
+        pat[2] = g.disp.seg7[g.clock.temp_alm_hh % 10] | 0x80;
+        pat[3] = g.disp.seg7[g.clock.temp_alm_mm / 10];
+        pat[4] = g.disp.seg7[g.clock.temp_alm_mm % 10] | 0x80;
+        pat[5] = g.disp.seg7[g.clock.temp_alm_ss / 10];
+        pat[6] = g.disp.seg7[g.clock.temp_alm_ss % 10];
+        pat[7] = 0x00;
+        segment_data = pat[display_cnt];
         if (g.disp.blinking && (g.timer.tick % (BLINK_ON_TIME_MS + BLINK_OFF_TIME_MS)) >= BLINK_ON_TIME_MS)
         {
-            // 根据当前设置字段，判断是否需要闪烁关闭
             if ((g.disp.field == FIELD_ALARM_HOUR && display_cnt >= 1 && display_cnt <= 2) ||
                 (g.disp.field == FIELD_ALARM_MINUTE && display_cnt >= 3 && display_cnt <= 4) ||
                 (g.disp.field == FIELD_ALARM_SECOND && display_cnt >= 5 && display_cnt <= 6))
             {
-                digit_should_blink_off = true;
+                segment_data = 0x00;
             }
         }
-        if (digit_should_blink_off)
-            segment_data = 0x00; // 闪烁关闭时显示空白
     }
     else if (g.disp.mode == MODE_ALARM_DISPLAY) // 闹钟显示模式
     {
-        // 显示”AL”字样和闹钟时间 (支持 FORMAT RIGHT)
-        if (display_cnt == 0) // 'A'
-            segment_data = g.disp.seg7[10];
-        else if (display_cnt == 1) // 'L'
-            segment_data = 0x38;
-        else if (display_cnt == 2) // 小时高位 或 'x' (如果未设置)
-            segment_data = (g.clock.alm_hh == 25) ? g.disp.seg7[17] : g.disp.seg7[g.clock.alm_hh / 10];
-        else if (display_cnt == 3) // 小时低位 或 'x' (如果未设置), 带小数点
-            segment_data = (g.clock.alm_hh == 25) ? g.disp.seg7[17] : (g.disp.seg7[g.clock.alm_hh % 10] | 0x80);
-        else if (display_cnt == 4) // 分钟高位 或 'x' (如果未设置)
-            segment_data = (g.clock.alm_hh == 25) ? g.disp.seg7[17] : g.disp.seg7[g.clock.alm_mm / 10];
-        else if (display_cnt == 5) // 分钟低位 或 'x' (如果未设置), 带小数点
-            segment_data = (g.clock.alm_hh == 25) ? g.disp.seg7[17] : (g.disp.seg7[g.clock.alm_mm % 10] | 0x80);
-        else if (display_cnt == 6) // 秒高位 或 'x' (如果未设置)
-            segment_data = (g.clock.alm_hh == 25) ? g.disp.seg7[17] : g.disp.seg7[g.clock.alm_ss / 10];
-        else if (display_cnt == 7) // 秒低位 或 'x' (如果未设置)
-            segment_data = (g.clock.alm_hh == 25) ? g.disp.seg7[17] : g.disp.seg7[g.clock.alm_ss % 10];
+        uint8_t pat[8];
+        pat[0] = g.disp.seg7[10]; // 'A'
+        pat[1] = 0x38;            // 'L'
+        if (g.clock.alm_hh == 25)
+        {
+            pat[2] = g.disp.seg7[17];
+            pat[3] = g.disp.seg7[17];
+            pat[4] = g.disp.seg7[17];
+            pat[5] = g.disp.seg7[17];
+            pat[6] = g.disp.seg7[17];
+            pat[7] = g.disp.seg7[17];
+        }
         else
-            segment_data = 0x00; // 未使用数码管
+        {
+            pat[2] = g.disp.seg7[g.clock.alm_hh / 10];
+            pat[3] = g.disp.seg7[g.clock.alm_hh % 10] | 0x80;
+            pat[4] = g.disp.seg7[g.clock.alm_mm / 10];
+            pat[5] = g.disp.seg7[g.clock.alm_mm % 10] | 0x80;
+            pat[6] = g.disp.seg7[g.clock.alm_ss / 10];
+            pat[7] = g.disp.seg7[g.clock.alm_ss % 10];
+        }
+        segment_data = pat[display_cnt];
     }
     else
     {

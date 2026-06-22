@@ -978,14 +978,10 @@ void ProcessUartCommand(void)
             while (payload_len > 0 && (g.uart.rx_buf[payload_offset + payload_len - 1U] == '\r' || g.uart.rx_buf[payload_offset + payload_len - 1U] == '\n'))
                 payload_len--;
             if (payload_len > 32)
-            {
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR LEN\r\n");
-            }
-            else
-            {
-                Display_StartMessage(&g.uart.rx_buf[payload_offset], payload_len);
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
-            }
+                payload_len = 32;
+
+            Display_StartMessage(&g.uart.rx_buf[payload_offset], payload_len);
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
         }
         else
         {

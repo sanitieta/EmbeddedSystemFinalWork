@@ -974,8 +974,9 @@ void ProcessUartCommand(void)
         if (g.uart.num_tokens > current_param_idx)
         {
             payload_offset = FindRawPayloadOffset(current_param_idx);
-            payload_len = (uint8_t)(g.uart.rx_len - payload_offset);
-            /* 修剪尾部 \r \n */
+            /* 使用 strlen 限制到第一个 null (支持多命令缓冲区中只取当前命令) */
+            payload_len = (uint8_t)strlen((char *)&g.uart.rx_buf[payload_offset]);
+            /* 修剪尾部 \r \n (防御性: 裸串口终端可能发送 \r\n) */
             while (payload_len > 0 && (g.uart.rx_buf[payload_offset + payload_len - 1U] == '\r' || g.uart.rx_buf[payload_offset + payload_len - 1U] == '\n'))
                 payload_len--;
             if (payload_len > 32)

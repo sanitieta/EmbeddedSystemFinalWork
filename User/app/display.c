@@ -101,6 +101,19 @@ static uint8_t SegmentForChar(uint8_t c)
     }
 }
 
+/* 将 n 字符内容在 8 位缓冲区中居中 (左右各留余量) */
+static void CenterContent(uint8_t chars[8], uint8_t n, uint8_t *dp_hex)
+{
+    uint8_t pad = (uint8_t)((8 - n) / 2U);
+    uint8_t i;
+    /* 右移腾出左侧 padding */
+    for (i = 8; i > pad; --i)
+        chars[i - 1U] = chars[i - 1U - pad];
+    for (i = 0; i < pad; ++i)
+        chars[i] = '_';
+    *dp_hex = (uint8_t)(*dp_hex << pad);
+}
+
 static void BuildCurrentDisplay(uint8_t chars[8], uint8_t *dp_hex)
 {
     uint8_t i;
@@ -162,6 +175,7 @@ static void BuildCurrentDisplay(uint8_t chars[8], uint8_t *dp_hex)
         chars[4] = DigitToAscii((uint8_t)(g.clock.temp_ss / 10));
         chars[5] = DigitToAscii((uint8_t)(g.clock.temp_ss % 10));
         *dp_hex = 0x0A;
+        CenterContent(chars, 6, dp_hex);
         return;
     }
 
@@ -184,6 +198,7 @@ static void BuildCurrentDisplay(uint8_t chars[8], uint8_t *dp_hex)
             chars[4] = DigitToAscii((uint8_t)(show_ss / 10));
             chars[5] = DigitToAscii((uint8_t)(show_ss % 10));
             *dp_hex = 0x0A;
+            CenterContent(chars, 6, dp_hex);
         }
         return;
     }
@@ -197,6 +212,7 @@ static void BuildCurrentDisplay(uint8_t chars[8], uint8_t *dp_hex)
         chars[4] = DigitToAscii((uint8_t)(g.clock.day / 10));
         chars[5] = DigitToAscii((uint8_t)(g.clock.day % 10));
         *dp_hex = 0x0A;
+        CenterContent(chars, 6, dp_hex);
     }
     else if (g.disp.main_disp == MAIN_DISPLAY_YEAR)
     {
@@ -219,6 +235,7 @@ static void BuildCurrentDisplay(uint8_t chars[8], uint8_t *dp_hex)
         chars[4] = DigitToAscii((uint8_t)(g.clock.ss / 10));
         chars[5] = DigitToAscii((uint8_t)(g.clock.ss % 10));
         *dp_hex = 0x0A;
+        CenterContent(chars, 6, dp_hex);
     }
 }
 
@@ -722,9 +739,7 @@ void UpdateDisplayShift(void)
     }
 }
 
-// 更新时间、日期和显示缓冲区
-
-// 更新时间、日期和显示缓冲区
+// 更新时间、日期和显示缓冲区 供UART/数码管参考
 void UpdateTimeAndDisplayBuffers(void)
 {
     // 格式化时间字符串

@@ -1128,13 +1128,13 @@ void ProcessUartCommand(void)
             }
             else if (compareTokens(&g.uart.tokens[current_param_idx], "USER1", 5))
             {
-                g.in.suppress_key_events = true;
+                /* 不设置 suppress_key_events: PC 端需要 *EVT:KEY USER1 来触发 NTP 对时 */
                 g.in.user_short_evt[0] = true;
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
             }
             else if (compareTokens(&g.uart.tokens[current_param_idx], "USER2", 5))
             {
-                g.in.suppress_key_events = true;
+                /* 不设置 suppress_key_events: PC 端需要 *EVT:KEY USER2 来触发天气刷新 */
                 g.in.user_short_evt[1] = true;
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
             }

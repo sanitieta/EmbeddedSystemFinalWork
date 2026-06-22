@@ -45,16 +45,23 @@ class Protocol:
             return {"type": "UNKNOWN", "raw": payload}
 
     def _parse_disp(self, args: str) -> Dict:
-        """*EVT:DISP <8chars> <dpHex>"""
-        parts = args.split()
-        if len(parts) >= 2:
-            chars = list(parts[0])  # 8-character string
+        """*EVT:DISP <8chars> <dpHex>
+
+        MCU sends exactly 8 display characters, one space, then 2 hex digits.
+        The 8-character payload may contain spaces (e.g. message display or
+        alarm-disabled "AL xx xx"), so we use fixed-position extraction rather
+        than whitespace splitting.
+        """
+        chars: list[str] = []
+        dp: int = 0
+        if len(args) >= 8:
+            chars = list(args[:8])
+        if len(args) >= 11:
             try:
-                dp = int(parts[1], 16) & 0xFF  # HEX bitmap, bit N -> digit N
+                dp = int(args[9:11], 16) & 0xFF
             except ValueError:
                 dp = 0
-            return {"type": "DISP", "chars": chars, "dp": dp}
-        return {"type": "DISP", "chars": [], "dp": 0}
+        return {"type": "DISP", "chars": chars, "dp": dp}
 
     def _parse_led(self, args: str) -> Dict:
         """*EVT:LED <hex2>"""

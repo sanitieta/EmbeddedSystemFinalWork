@@ -20,6 +20,7 @@ app_state_t g = {
         .rightshift = 0x01,    // 位选从最低位开始扫描
         .on = true,            // 数码管默认开启
         .shifting = true,      // 流动显示默认启动
+        .shift = 0,            // 流动偏移量从 0 开始 (ARMCC5 兼容)
         .shift_mode = false,   // 默认左移 (FORMAT LEFT)
         .reversed = false,     // 默认正序显示
         .mode = MODE_FLOWING,  // 初始为流动显示模式

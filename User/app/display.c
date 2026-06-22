@@ -288,9 +288,13 @@ static uint8_t ReverseDpBitmap(uint8_t left_dp)
     {
         if (left_dp & (uint8_t)(1U << i))
         {
-            if (i <= 6)
+            if (i == 7)
             {
-                right_dp |= (uint8_t)(1U << (6 - i));
+                right_dp |= 1U;           /* bit 7 → bit 0 */
+            }
+            else
+            {
+                right_dp |= (uint8_t)(1U << (6 - i)); /* bits 0-6 镜像 */
             }
         }
     }

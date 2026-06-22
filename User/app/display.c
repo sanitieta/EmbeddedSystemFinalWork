@@ -545,14 +545,29 @@ void Update7SegmentDisplay(void)
     else if (g.disp.mode == MODE_DATE_SET) // 日期设置模式
     {
         uint8_t pat[8];
-        pat[0] = g.disp.seg7[(g.clock.temp_year / 1000) % 10];
-        pat[1] = g.disp.seg7[(g.clock.temp_year / 100) % 10];
-        pat[2] = g.disp.seg7[(g.clock.temp_year / 10) % 10];
-        pat[3] = g.disp.seg7[(g.clock.temp_year % 10)] | 0x80;
-        pat[4] = g.disp.seg7[g.clock.temp_month / 10];
-        pat[5] = g.disp.seg7[g.clock.temp_month % 10] | 0x80;
-        pat[6] = g.disp.seg7[g.clock.temp_day / 10];
-        pat[7] = g.disp.seg7[g.clock.temp_day % 10];
+        if (g.disp.reversed)
+        {
+            /* FORMAT RIGHT: dp 移到 month_10s 和 day_10s，逆序后落位正确 */
+            pat[0] = g.disp.seg7[(g.clock.temp_year / 1000) % 10];
+            pat[1] = g.disp.seg7[(g.clock.temp_year / 100) % 10];
+            pat[2] = g.disp.seg7[(g.clock.temp_year / 10) % 10];
+            pat[3] = g.disp.seg7[(g.clock.temp_year % 10)];
+            pat[4] = g.disp.seg7[g.clock.temp_month / 10] | 0x80;
+            pat[5] = g.disp.seg7[g.clock.temp_month % 10];
+            pat[6] = g.disp.seg7[g.clock.temp_day / 10] | 0x80;
+            pat[7] = g.disp.seg7[g.clock.temp_day % 10];
+        }
+        else
+        {
+            pat[0] = g.disp.seg7[(g.clock.temp_year / 1000) % 10];
+            pat[1] = g.disp.seg7[(g.clock.temp_year / 100) % 10];
+            pat[2] = g.disp.seg7[(g.clock.temp_year / 10) % 10];
+            pat[3] = g.disp.seg7[(g.clock.temp_year % 10)] | 0x80;
+            pat[4] = g.disp.seg7[g.clock.temp_month / 10];
+            pat[5] = g.disp.seg7[g.clock.temp_month % 10] | 0x80;
+            pat[6] = g.disp.seg7[g.clock.temp_day / 10];
+            pat[7] = g.disp.seg7[g.clock.temp_day % 10];
+        }
         segment_data = pat[display_cnt];
         if (g.disp.blinking && (g.timer.tick % (BLINK_ON_TIME_MS + BLINK_OFF_TIME_MS)) >= BLINK_ON_TIME_MS)
         {
@@ -569,12 +584,24 @@ void Update7SegmentDisplay(void)
         uint8_t pat[8];
         pat[0] = 0x00;
         pat[1] = g.disp.seg7[g.clock.temp_hh / 10];
-        pat[2] = g.disp.seg7[g.clock.temp_hh % 10] | 0x80;
-        pat[3] = g.disp.seg7[g.clock.temp_mm / 10];
-        pat[4] = g.disp.seg7[g.clock.temp_mm % 10] | 0x80;
-        pat[5] = g.disp.seg7[g.clock.temp_ss / 10];
-        pat[6] = g.disp.seg7[g.clock.temp_ss % 10];
         pat[7] = 0x00;
+        if (g.disp.reversed)
+        {
+            /* FORMAT RIGHT: dp 移到 MM_tens 和 SS_tens */
+            pat[2] = g.disp.seg7[g.clock.temp_hh % 10];
+            pat[3] = g.disp.seg7[g.clock.temp_mm / 10] | 0x80;
+            pat[4] = g.disp.seg7[g.clock.temp_mm % 10];
+            pat[5] = g.disp.seg7[g.clock.temp_ss / 10] | 0x80;
+            pat[6] = g.disp.seg7[g.clock.temp_ss % 10];
+        }
+        else
+        {
+            pat[2] = g.disp.seg7[g.clock.temp_hh % 10] | 0x80;
+            pat[3] = g.disp.seg7[g.clock.temp_mm / 10];
+            pat[4] = g.disp.seg7[g.clock.temp_mm % 10] | 0x80;
+            pat[5] = g.disp.seg7[g.clock.temp_ss / 10];
+            pat[6] = g.disp.seg7[g.clock.temp_ss % 10];
+        }
         segment_data = pat[display_cnt];
         if (g.disp.blinking && (g.timer.tick % (BLINK_ON_TIME_MS + BLINK_OFF_TIME_MS)) >= BLINK_ON_TIME_MS)
         {
@@ -591,12 +618,23 @@ void Update7SegmentDisplay(void)
         uint8_t pat[8];
         pat[0] = 0x00;
         pat[1] = g.disp.seg7[g.clock.temp_alm_hh / 10];
-        pat[2] = g.disp.seg7[g.clock.temp_alm_hh % 10] | 0x80;
-        pat[3] = g.disp.seg7[g.clock.temp_alm_mm / 10];
-        pat[4] = g.disp.seg7[g.clock.temp_alm_mm % 10] | 0x80;
-        pat[5] = g.disp.seg7[g.clock.temp_alm_ss / 10];
-        pat[6] = g.disp.seg7[g.clock.temp_alm_ss % 10];
         pat[7] = 0x00;
+        if (g.disp.reversed)
+        {
+            pat[2] = g.disp.seg7[g.clock.temp_alm_hh % 10];
+            pat[3] = g.disp.seg7[g.clock.temp_alm_mm / 10] | 0x80;
+            pat[4] = g.disp.seg7[g.clock.temp_alm_mm % 10];
+            pat[5] = g.disp.seg7[g.clock.temp_alm_ss / 10] | 0x80;
+            pat[6] = g.disp.seg7[g.clock.temp_alm_ss % 10];
+        }
+        else
+        {
+            pat[2] = g.disp.seg7[g.clock.temp_alm_hh % 10] | 0x80;
+            pat[3] = g.disp.seg7[g.clock.temp_alm_mm / 10];
+            pat[4] = g.disp.seg7[g.clock.temp_alm_mm % 10] | 0x80;
+            pat[5] = g.disp.seg7[g.clock.temp_alm_ss / 10];
+            pat[6] = g.disp.seg7[g.clock.temp_alm_ss % 10];
+        }
         segment_data = pat[display_cnt];
         if (g.disp.blinking && (g.timer.tick % (BLINK_ON_TIME_MS + BLINK_OFF_TIME_MS)) >= BLINK_ON_TIME_MS)
         {

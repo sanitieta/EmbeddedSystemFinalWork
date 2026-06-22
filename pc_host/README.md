@@ -20,7 +20,7 @@ python main.py
 - **P5 异常处理**: 串口占用/解析异常/超时 → 弹窗或日志高亮, GUI 不崩溃
 
 ### 扩展功能 (选做 E1-E4)
-- **E1 NTP 对时**: 从 aliyun NTP 获取时间, USER1 自动触发
+- **E1 NTP 对时**: 后台获取 aliyun/pool NTP 标准时间，按钮与 USER1 共用流程，成功后板端 LED4 常亮
 - **E2 天气获取**: wttr.in 免费 API, 30 分钟刷新, USER2 短显
 - **E3 自动昼夜**: astral 计算日出日落, 自动 *SET:MODE DAY/NIGHT
 - **E4 可视化看板**: events.csv 持久化, 3 种 matplotlib 图表

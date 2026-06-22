@@ -58,7 +58,7 @@ class MainWindow(QMainWindow):
         self.log_panel = LogPanel(self)
 
         # ---- 扩展功能模块 ----
-        self.ntp_helper = NtpHelper(self.serial_worker)
+        self.ntp_helper = NtpHelper(self.serial_worker, self)
         self.weather_helper = WeatherHelper(self.serial_worker)
         self.auto_daynight = AutoDayNight(self.serial_worker)
         self.dashboard = Dashboard()
@@ -299,6 +299,9 @@ class MainWindow(QMainWindow):
         # ControlPanel / TwinPanel 发送命令 → 日志 + SerialWorker
         self.control_panel.send_command.connect(self._on_send_command)
         self.twin_panel.virtual_key_pressed.connect(self._on_send_command)
+        self.ntp_helper.command_ready.connect(self._on_send_command)
+        self.ntp_helper.sync_started.connect(self._on_ntp_sync_started)
+        self.ntp_helper.sync_finished.connect(self._on_ntp_sync_finished)
 
         # 工具栏按钮
         self.btn_refresh.clicked.connect(self._scan_ports)
@@ -375,14 +378,39 @@ class MainWindow(QMainWindow):
                 QTimer.singleShot(450, lambda: self.serial_worker.send_line("*GET:ALARM"))
 
     def _on_ntp_sync(self):
-        """手动触发 NTP 对时"""
-        ok, msg = self.ntp_helper.sync_manual()
+        """手动按钮触发 NTP 对时。"""
+        self._request_ntp_sync("manual")
+
+    def _request_ntp_sync(self, source: str):
+        """按钮和 USER1 共用的唯一 NTP 对时入口。"""
+        if source == "manual" and not self.serial_worker._connected:
+            msg = "请先连接 S800 板，再执行 NTP 对时"
+            self.status_bar.showMessage(msg, 5000)
+            QMessageBox.warning(self, "NTP 对时", msg)
+            return
+
+        if not self.ntp_helper.request_sync(source):
+            self.status_bar.showMessage("NTP 对时正在进行，请稍候", 3000)
+
+    def _on_ntp_sync_started(self, source: str):
+        """NTP 后台任务开始。"""
+        self.btn_ntp.setEnabled(False)
+        self.btn_ntp.setText("◷  对时中…")
+        trigger = "USER1" if source == "USER1" else "手动"
+        self.status_bar.showMessage(f"{trigger}触发 NTP 对时，正在获取标准时间…", 0)
+
+    def _on_ntp_sync_finished(self, ok: bool, msg: str, source: str):
+        """NTP 后台任务完成；该槽始终在 GUI 线程执行。"""
+        self.btn_ntp.setEnabled(True)
+        self.btn_ntp.setText("◷  NTP 对时")
         if ok:
             self.status_bar.showMessage(f"NTP: {msg}", 5000)
             self.dashboard.log_event("SYNC", "NTP", msg)
         else:
-            QMessageBox.warning(self, "NTP 对时失败", msg)
+            self.status_bar.showMessage(f"NTP: {msg}", 8000)
             self.log_panel.add_error(f"NTP: {msg}")
+            if source == "manual":
+                QMessageBox.warning(self, "NTP 对时失败", msg)
 
     def _on_weather_fetch(self):
         """手动刷新天气"""
@@ -502,13 +530,8 @@ class MainWindow(QMainWindow):
             self.dashboard.log_event("KEY", key_name)
 
             if key_name == "USER1":
-                # E1: USER1 自动触发 NTP 对时
-                self.status_bar.showMessage("收到 USER1，自动 NTP 对时中...", 2000)
-                ok, msg = self.ntp_helper.sync_from_user1()
-                if ok:
-                    self.dashboard.log_event("SYNC", "NTP", msg)
-                else:
-                    self.log_panel.add_error(f"NTP: {msg}")
+                # E1: 与工具栏 NTP 按钮完全相同的对时流程
+                self._request_ntp_sync("USER1")
 
             elif key_name == "USER2":
                 # E2: USER2 触发天气短显

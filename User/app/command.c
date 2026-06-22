@@ -105,6 +105,7 @@ static void ResetProtocolState(void)
     g.disp.night_mode = false;
     g.disp.led_takeover = false;
     g.disp.led_pattern = 0x00;
+    g.disp.ntp_synced = false;
     g.disp.msg_active = false;
     g.disp.msg_scroll = false;
     g.disp.msg_len = 0;
@@ -1129,6 +1130,21 @@ void ProcessUartCommand(void)
         }
     }
 
+    // 处理 "*NTP SYNC" 命令：PC 已成功获取标准时间并完成下发
+    else if (g.uart.num_tokens >= 1 && compareTokens(&g.uart.tokens[0], "*NTP", 4))
+    {
+        if (g.uart.num_tokens == 2 && compareTokens(&g.uart.tokens[1], "SYNC", 4))
+        {
+            g.disp.ntp_synced = true;
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
+            Display_UpdateStatusLeds();
+        }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
+        }
+    }
+
     // 处理 "*GET:DATE" 命令 (获取日期信息)
     else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*GET:DATE"))
     {
@@ -1427,6 +1443,7 @@ void ProcessUartCommand(void)
             "*SET:LED <hex2>                           : LED takeover; 00 restores default.\r\n"
             "*SET:MODE NIGHT/DAY                       : Night/day mode.\r\n"
             "*SET:KEY FUNC/SHIFT/ADD/SAVE/DISP/SPEED/FORMAT/EXT/USER1/USER2 : Virtual key injection.\r\n"
+            "*NTP SYNC                                 : Mark NTP sync complete; LED4 on.\r\n"
             "*GET:DATE [YEAR] [MONTH] [DATE]           : Get date.\r\n"
             "*GET:TIME [HOUR] [MINUTE] [SECOND]        : Get time.\r\n"
             "*GET:ALARM                                : Get alarm time.\r\n"

@@ -28,6 +28,7 @@ app_state_t g = {
         .field = FIELD_NONE,   // 无编辑字段选中
         .prev_shifting = true, // 进入编辑前移位状态默认值
         .prev_shift_mode = false, // 进入编辑前格式默认值
+        .ntp_synced = false,   // LED4: 尚未完成 NTP 对时
         .init_flag = true,     // 启动时进入初始化动画流程
     },
 

@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QMessageBox, QSplitter,
     QStatusBar, QLabel, QToolBar, QComboBox, QPushButton,
-    QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy,
+    QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QCheckBox,
 )
 from PyQt5.QtCore import Qt, QTimer
 
@@ -60,7 +60,7 @@ class MainWindow(QMainWindow):
         # ---- 扩展功能模块 ----
         self.ntp_helper = NtpHelper(self.serial_worker, self)
         self.weather_helper = WeatherHelper(self.serial_worker, self)
-        self.auto_daynight = AutoDayNight(self.serial_worker)
+        self.auto_daynight = AutoDayNight(self)
         self.dashboard = Dashboard()
 
         # ---- 构建 UI ----
@@ -73,6 +73,9 @@ class MainWindow(QMainWindow):
 
         # ---- 连接信号 ----
         self._connect_signals()
+
+        # ---- 自动昼夜模式（默认开启） ----
+        self.auto_daynight.start(enabled=True)
 
         # ---- 启动后台 ----
         self.serial_worker.start()
@@ -196,6 +199,23 @@ class MainWindow(QMainWindow):
         heading.addWidget(workspace_subtitle)
         heading_row.addLayout(heading)
         heading_row.addStretch()
+
+        daynight_summary = QWidget()
+        daynight_summary.setObjectName("dayNightSummary")
+        daynight_layout = QHBoxLayout(daynight_summary)
+        daynight_layout.setContentsMargins(0, 0, 8, 0)
+        daynight_layout.setSpacing(8)
+        self.chk_auto_daynight = QCheckBox("自动昼夜")
+        self.chk_auto_daynight.setObjectName("autoDayNightToggle")
+        self.chk_auto_daynight.setChecked(True)
+        self.chk_auto_daynight.setToolTip("按上海日出日落时间自动切换 DAY / NIGHT")
+        daynight_layout.addWidget(self.chk_auto_daynight)
+        self.sun_schedule_label = QLabel("☀ --:--  ☾ --:--")
+        self.sun_schedule_label.setObjectName("sunScheduleLabel")
+        self.sun_schedule_label.setToolTip("上海当天日出 / 日落时间")
+        daynight_layout.addWidget(self.sun_schedule_label)
+        heading_row.addWidget(daynight_summary, alignment=Qt.AlignVCenter)
+
         protocol_badge = QLabel("UART  ·  115200 8N1")
         protocol_badge.setObjectName("protocolBadge")
         heading_row.addWidget(protocol_badge, alignment=Qt.AlignVCenter)
@@ -305,6 +325,10 @@ class MainWindow(QMainWindow):
         self.weather_helper.command_ready.connect(self._on_weather_command)
         self.weather_helper.fetch_started.connect(self._on_weather_fetch_started)
         self.weather_helper.fetch_finished.connect(self._on_weather_fetch_finished)
+        self.auto_daynight.command_ready.connect(self._on_auto_daynight_command)
+        self.auto_daynight.schedule_updated.connect(self._on_daynight_schedule_updated)
+        self.auto_daynight.enabled_changed.connect(self._on_auto_daynight_enabled_changed)
+        self.auto_daynight.error.connect(self._on_auto_daynight_error)
 
         # 工具栏按钮
         self.btn_refresh.clicked.connect(self._scan_ports)
@@ -312,6 +336,7 @@ class MainWindow(QMainWindow):
         self.btn_ntp.clicked.connect(self._on_ntp_sync)
         self.btn_weather.clicked.connect(self._on_weather_fetch)
         self.btn_dashboard.clicked.connect(self._on_dashboard)
+        self.chk_auto_daynight.toggled.connect(self._on_auto_daynight_toggled)
 
     # ═══════════════════════════════════════════════════════════════
     # COM 口扫描
@@ -488,6 +513,55 @@ class MainWindow(QMainWindow):
         self.btn_dashboard.setText("⌁  数据看板")
         self.btn_dashboard.setToolTip("查看事件统计图表")
 
+    def _on_auto_daynight_toggled(self, checked: bool):
+        """启停基于上海日出日落的自动模式。"""
+        if not self.auto_daynight.set_enabled(checked) and checked:
+            self.chk_auto_daynight.blockSignals(True)
+            self.chk_auto_daynight.setChecked(False)
+            self.chk_auto_daynight.blockSignals(False)
+            self.chk_auto_daynight.setEnabled(False)
+            return
+
+        state = "已开启" if checked else "已关闭"
+        self.status_bar.showMessage(f"自动昼夜模式{state}", 3000)
+
+    def _on_auto_daynight_enabled_changed(self, enabled: bool):
+        """同步模块状态与工具栏开关。"""
+        if self.chk_auto_daynight.isChecked() != enabled:
+            self.chk_auto_daynight.blockSignals(True)
+            self.chk_auto_daynight.setChecked(enabled)
+            self.chk_auto_daynight.blockSignals(False)
+
+    def _on_daynight_schedule_updated(
+        self, target_mode: str, sunrise: str, sunset: str
+    ):
+        """显示当天日出、日落及当前自动目标。"""
+        self.sun_schedule_label.setText(f"☀ {sunrise}  ☾ {sunset}")
+        self.sun_schedule_label.setToolTip(
+            f"上海日出 {sunrise} / 日落 {sunset}\n当前自动目标：{target_mode}"
+        )
+        self.sun_schedule_label.setProperty("mode", target_mode.lower())
+        self.sun_schedule_label.style().unpolish(self.sun_schedule_label)
+        self.sun_schedule_label.style().polish(self.sun_schedule_label)
+
+    def _on_auto_daynight_command(self, command: str, target_mode: str):
+        """仅在串口在线时下发自动 DAY/NIGHT 命令。"""
+        if not self.serial_worker._connected:
+            return
+        self._on_send_command(command)
+        self.status_bar.showMessage(
+            f"自动昼夜：已切换到 {target_mode}", 4000
+        )
+        self.dashboard.log_event("MODE", "AUTO", target_mode)
+
+    def _on_auto_daynight_error(self, message: str):
+        """自动昼夜依赖缺失或计算失败。"""
+        if not self.auto_daynight.available:
+            self.chk_auto_daynight.setEnabled(False)
+            self.sun_schedule_label.setText("自动昼夜不可用")
+        self.log_panel.add_error(message)
+        self.status_bar.showMessage(message, 8000)
+
     # ═══════════════════════════════════════════════════════════════
     # 命令发送处理
     # ═══════════════════════════════════════════════════════════════
@@ -563,6 +637,7 @@ class MainWindow(QMainWindow):
             state = event.get("state", "")
             self.twin_panel.update_mode(state)
             self._update_status_bar_mode(state)
+            self.auto_daynight.note_device_mode(state)
 
         elif etype == "ALARM":
             self.alarm_label.setText("ALARM: RINGING")
@@ -649,6 +724,7 @@ class MainWindow(QMainWindow):
             self.btn_connect.setText("断开")
             self.btn_connect.setProperty("danger", True)
             self.weather_helper.send_status_led_to_mcu()
+            QTimer.singleShot(600, self.auto_daynight.sync_now)
         else:
             self.conn_label.setText("●  OFFLINE")
             self._set_widget_state(self.conn_label, "offline")
@@ -693,7 +769,7 @@ class MainWindow(QMainWindow):
         self.weather_helper.stop_auto_refresh()
 
         # 停止自动昼夜模式定时器
-        self.auto_daynight._cancel_timer()
+        self.auto_daynight.stop()
 
         event.accept()
 

@@ -73,6 +73,30 @@ QWidget#toolbarSpacer {
     background: transparent;
 }
 
+QWidget#dayNightSummary {
+    background: transparent;
+}
+
+QLabel#sunScheduleLabel {
+    color: #8292AA;
+    background-color: #0A0F19;
+    border: 1px solid #25314A;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 12px;
+}
+
+QLabel#sunScheduleLabel[mode="day"] {
+    color: #F0C674;
+    border-color: #5E5133;
+}
+
+QLabel#sunScheduleLabel[mode="night"] {
+    color: #9CB7E8;
+    border-color: #344A70;
+}
+
 QWidget#portBlock {
     border-left: 1px solid #25314A;
 }

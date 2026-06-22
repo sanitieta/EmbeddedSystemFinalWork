@@ -398,12 +398,22 @@ void ProcessUartCommand(void)
         current_param_idx = 1; // 参数从第二个Token开始
     }
 
-    /* 开机动画期间仅允许 *PING / *RST / HELP / INIT，其余返回 ERROR BUSY */
+    /* 开机动画期间禁止修改状态，仅放行只读命令和系统命令 */
     if (g.disp.init_flag && g.uart.num_tokens > 0)
     {
+        /* 检查首 Token 是否为 *GET: 前缀 (允许所有只读查询) */
+        bool is_get = (g.uart.tokens[0].token_len >= 5 &&
+                       toUpper(g.uart.tokens[0].token_str[0]) == '*' &&
+                       toUpper(g.uart.tokens[0].token_str[1]) == 'G' &&
+                       toUpper(g.uart.tokens[0].token_str[2]) == 'E' &&
+                       toUpper(g.uart.tokens[0].token_str[3]) == 'T' &&
+                       (g.uart.tokens[0].token_str[4] == ':' ||
+                        (g.uart.num_tokens >= 2 && g.uart.tokens[1].token_len > 0 &&
+                         g.uart.tokens[1].token_str[0] == ':')));
         if (!(compareTokens(&g.uart.tokens[0], "*PING", 5) ||
               compareTokens(&g.uart.tokens[0], "HELP", 4) ||
               compareTokens(&g.uart.tokens[0], "INIT", 4) ||
+              is_get ||
               matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL),
                            g.uart.num_tokens, "*RST")))
         {

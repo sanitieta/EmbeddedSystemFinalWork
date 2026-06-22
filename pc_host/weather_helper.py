@@ -1,121 +1,280 @@
 """
-天气获取助手 (E2)
-==================
-- 从 wttr.in 获取天气 (免费, 无 API Key)
-- 启动时拉取一次, 每 30 分钟自动刷新
-- USER2 触发: 下发 *SET:MSG 短显天气 5 秒
-- LED 编码: 晴/雨/高温指示
+天气数据与 MCU 输出助手 (E2)
+===========================
+- Open-Meteo 主数据源，wttr.in 备用数据源
+- 尊重系统代理；遇到 ProxyError/SSLError 时自动尝试直连
+- 严格校验 HTTP 状态和 JSON 结构
+- 保留最近一次成功结果，短时网络故障时使用缓存
+- USER2 将 ASCII 短消息和 LED5-LED7 编码下发到 MCU
 """
 
+from __future__ import annotations
+
 import time
-import threading
+from dataclasses import dataclass
+from typing import Any, Callable
 
 try:
     import requests
     _HAS_REQUESTS = True
 except ImportError:
+    requests = None
     _HAS_REQUESTS = False
 
 from protocol import Protocol
 
 
-WEATHER_URL = "https://wttr.in/Shanghai?format=j1"
-WEATHER_REFRESH_S = 30 * 60  # 30 分钟
-REQUEST_TIMEOUT_S = 10
+OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
+WTTR_URL = "https://wttr.in/Shanghai"
+SHANGHAI_LATITUDE = 31.2304
+SHANGHAI_LONGITUDE = 121.4737
+REQUEST_TIMEOUT = (4, 6)  # connect, read
+WEATHER_CACHE_MAX_AGE_S = 2 * 60 * 60
+USER_AGENT = "S800-Device-Console/1.0"
+
+
+@dataclass(frozen=True)
+class WeatherSnapshot:
+    temperature_c: int
+    condition: str
+    description_zh: str
+    provider: str
+
+    @property
+    def mcu_message(self) -> str:
+        return f"{self.temperature_c:+d}C {self.condition}"
+
+    @property
+    def summary(self) -> str:
+        return f"{self.temperature_c}°C {self.description_zh} · {self.provider}"
+
+
+class WeatherProviderError(RuntimeError):
+    """天气源请求或响应无效。"""
 
 
 class WeatherHelper:
-    """天气获取助手"""
+    """天气获取、缓存以及 MCU 消息/LED 编码。"""
 
     def __init__(self, serial_worker):
         self.serial_worker = serial_worker
         self.protocol = Protocol()
-        self._temperature: int | None = None
-        self._condition: str = ""
+        self._snapshot: WeatherSnapshot | None = None
         self._last_fetch_time: float = 0.0
 
-        # 后台定时刷新
-        self._timer: threading.Timer | None = None
+        # 保留旧属性，兼容已有 UI/调试代码。
+        self._temperature: int | None = None
+        self._condition: str = ""
+
+    @property
+    def has_weather(self) -> bool:
+        return self._snapshot is not None
+
+    @property
+    def snapshot(self) -> WeatherSnapshot | None:
+        return self._snapshot
 
     def fetch_now(self) -> tuple[bool, str]:
-        """立即获取天气，返回 (成功, 描述)"""
+        """同步获取天气；下一提交会在 GUI 层把它移到后台线程。"""
         return self._do_fetch()
 
     def start_auto_refresh(self):
-        """启动 30 分钟自动刷新"""
-        self._schedule_next()
+        """自动刷新由 MainWindow 的 QTimer 统一调度。"""
 
     def stop_auto_refresh(self):
-        """停止自动刷新"""
-        if self._timer:
-            self._timer.cancel()
-            self._timer = None
+        """保留兼容入口；当前 helper 不持有定时器。"""
 
-    def send_weather_to_mcu(self):
-        """
-        USER2 触发 (E2): 下发天气消息到 MCU 数码管短显 5 秒
-        由 main.py 在收到 *EVT:KEY USER2 时调用
-        """
-        if self._temperature is not None and self._condition:
-            msg = f"{self._temperature}C {self._condition}"
-        else:
-            msg = "--C --"
+    def send_weather_to_mcu(self) -> bool:
+        """将最近天气以 7SEG 友好的 ASCII 消息和 LED 编码下发。"""
+        snapshot = self._snapshot
+        if snapshot is None:
+            return False
 
-        # 发送消息到 MCU (MCU 自动在 ≤8 字符时静显 2.5s, >8 字符时滚动)
-        self.serial_worker.send_line(self.protocol.build_set_msg(msg))
-
-        # 同时更新 LED 指示
-        led = self._compute_weather_led()
-        self.serial_worker.send_line(self.protocol.build_set_led(led))
+        self.serial_worker.send_line(
+            self.protocol.build_set_msg(snapshot.mcu_message)
+        )
+        self.serial_worker.send_line(
+            self.protocol.build_set_led(self._compute_weather_led())
+        )
+        return True
 
     def _do_fetch(self) -> tuple[bool, str]:
-        """实际 HTTP 请求"""
-        if not _HAS_REQUESTS:
+        if not _HAS_REQUESTS or requests is None:
             return False, "requests 库未安装"
 
+        errors: list[str] = []
+        providers: tuple[tuple[str, Callable[[], WeatherSnapshot]], ...] = (
+            ("Open-Meteo", self._fetch_open_meteo),
+            ("wttr.in", self._fetch_wttr),
+        )
+
+        for provider_name, fetcher in providers:
+            try:
+                snapshot = fetcher()
+                self._apply_snapshot(snapshot)
+                self.serial_worker.send_line(
+                    self.protocol.build_set_led(self._compute_weather_led())
+                )
+                return True, snapshot.summary
+            except WeatherProviderError as exc:
+                errors.append(f"{provider_name}: {exc}")
+
+        if self._cache_is_fresh():
+            assert self._snapshot is not None
+            return True, f"{self._snapshot.summary}（缓存）"
+
+        return False, "天气源均不可用：" + "；".join(errors)
+
+    def _fetch_open_meteo(self) -> WeatherSnapshot:
+        data = self._request_json(
+            OPEN_METEO_URL,
+            params={
+                "latitude": SHANGHAI_LATITUDE,
+                "longitude": SHANGHAI_LONGITUDE,
+                "current": "temperature_2m,weather_code",
+                "timezone": "Asia/Shanghai",
+            },
+        )
+        return self._parse_open_meteo(data)
+
+    def _fetch_wttr(self) -> WeatherSnapshot:
+        data = self._request_json(WTTR_URL, params={"format": "j1"})
+        return self._parse_wttr(data)
+
+    def _request_json(self, url: str, params: dict[str, Any]) -> dict[str, Any]:
+        """先使用环境代理；代理/TLS握手失败时以相同证书校验直连。"""
+        assert requests is not None
+        attempt_errors: list[str] = []
+
+        for trust_env in (True, False):
+            session = requests.Session()
+            session.trust_env = trust_env
+            mode = "代理" if trust_env else "直连"
+            try:
+                response = session.get(
+                    url,
+                    params=params,
+                    headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+                    timeout=REQUEST_TIMEOUT,
+                )
+                response.raise_for_status()
+                data = response.json()
+                if not isinstance(data, dict):
+                    raise ValueError("JSON 根节点不是对象")
+                return data
+            except Exception as exc:
+                attempt_errors.append(f"{mode} {self._short_error(exc)}")
+                is_proxy_or_tls = isinstance(
+                    exc,
+                    (requests.exceptions.ProxyError, requests.exceptions.SSLError),
+                )
+                if not trust_env or not is_proxy_or_tls:
+                    break
+            finally:
+                session.close()
+
+        raise WeatherProviderError(" / ".join(attempt_errors))
+
+    @staticmethod
+    def _parse_open_meteo(data: dict[str, Any]) -> WeatherSnapshot:
+        current = data.get("current")
+        if not isinstance(current, dict):
+            raise WeatherProviderError("响应缺少 current")
+
         try:
-            resp = requests.get(WEATHER_URL, timeout=REQUEST_TIMEOUT_S)
-            data = resp.json()
+            temperature = int(round(float(current["temperature_2m"])))
+            weather_code = int(current["weather_code"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise WeatherProviderError(f"current 字段无效: {exc}") from exc
 
-            current = data.get("current_condition", [{}])[0]
-            self._temperature = int(current.get("temp_C", 0))
-            self._condition = current.get("weatherDesc", [{}])[0].get("value", "Unknown")
+        condition, description = WeatherHelper._condition_from_wmo(weather_code)
+        return WeatherSnapshot(temperature, condition, description, "Open-Meteo")
 
-            self._last_fetch_time = time.monotonic()
+    @staticmethod
+    def _parse_wttr(data: dict[str, Any]) -> WeatherSnapshot:
+        rows = data.get("current_condition")
+        if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+            raise WeatherProviderError("响应缺少 current_condition")
 
-            # 更新 MCU LED 指示
-            led = self._compute_weather_led()
-            self.serial_worker.send_line(self.protocol.build_set_led(led))
+        current = rows[0]
+        try:
+            temperature = int(round(float(current["temp_C"])))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise WeatherProviderError(f"temp_C 字段无效: {exc}") from exc
 
-            return True, f"{self._temperature}°C {self._condition}"
-        except Exception as e:
-            return False, f"天气请求失败: {e}"
+        descriptions = current.get("weatherDesc")
+        raw_description = "Unknown"
+        if isinstance(descriptions, list) and descriptions:
+            first = descriptions[0]
+            if isinstance(first, dict):
+                raw_description = str(first.get("value", "Unknown"))
 
-    def _schedule_next(self):
-        """安排下次 30 分钟刷新"""
-        self._timer = threading.Timer(WEATHER_REFRESH_S, self._on_timer)
-        self._timer.daemon = True
-        self._timer.start()
+        condition, description = WeatherHelper._condition_from_text(raw_description)
+        return WeatherSnapshot(temperature, condition, description, "wttr.in")
 
-    def _on_timer(self):
-        self._do_fetch()
-        self._schedule_next()
+    def _apply_snapshot(self, snapshot: WeatherSnapshot) -> None:
+        self._snapshot = snapshot
+        self._temperature = snapshot.temperature_c
+        self._condition = snapshot.condition
+        self._last_fetch_time = time.monotonic()
+
+    def _cache_is_fresh(self) -> bool:
+        return (
+            self._snapshot is not None
+            and time.monotonic() - self._last_fetch_time <= WEATHER_CACHE_MAX_AGE_S
+        )
 
     def _compute_weather_led(self) -> int:
-        """
-        根据天气数据计算 LED 指示编码:
-        - LED5 (bit 5): 雨天
-        - LED6 (bit 6): 高温 (>35°C)
-        - LED7 (bit 7): 晴天
-        注: 这是 PC 侧建议编码, 需要通过 *SET:LED 下发到 MCU
-        """
+        """LED5=降水，LED6=高温，LED7=晴天。"""
+        snapshot = self._snapshot
+        if snapshot is None:
+            return 0x00
+
         led = 0x00
-        if self._condition:
-            cond_lower = self._condition.lower()
-            if "rain" in cond_lower or "drizzle" in cond_lower or "shower" in cond_lower:
-                led |= 0x20  # LED5
-            if "sunny" in cond_lower or "clear" in cond_lower:
-                led |= 0x80  # LED7
-        if self._temperature is not None and self._temperature > 35:
-            led |= 0x40  # LED6
+        if snapshot.condition in {"RAIN", "SNOW", "STORM"}:
+            led |= 0x20
+        if snapshot.temperature_c > 35:
+            led |= 0x40
+        if snapshot.condition == "SUNNY":
+            led |= 0x80
         return led
+
+    @staticmethod
+    def _condition_from_wmo(code: int) -> tuple[str, str]:
+        if code == 0:
+            return "SUNNY", "晴"
+        if code in {1, 2, 3}:
+            return "CLOUDY", "多云"
+        if code in {45, 48}:
+            return "FOG", "雾"
+        if code in {51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82}:
+            return "RAIN", "雨"
+        if code in {71, 73, 75, 77, 85, 86}:
+            return "SNOW", "雪"
+        if code in {95, 96, 99}:
+            return "STORM", "雷暴"
+        return "WEATHER", "天气未知"
+
+    @staticmethod
+    def _condition_from_text(description: str) -> tuple[str, str]:
+        value = description.lower()
+        if any(word in value for word in ("thunder", "storm")):
+            return "STORM", "雷暴"
+        if any(word in value for word in ("rain", "drizzle", "shower")):
+            return "RAIN", "雨"
+        if any(word in value for word in ("snow", "sleet", "ice")):
+            return "SNOW", "雪"
+        if any(word in value for word in ("fog", "mist")):
+            return "FOG", "雾"
+        if any(word in value for word in ("sunny", "clear")):
+            return "SUNNY", "晴"
+        if any(word in value for word in ("cloud", "overcast")):
+            return "CLOUDY", "多云"
+        return "WEATHER", description.strip() or "天气未知"
+
+    @staticmethod
+    def _short_error(exc: Exception) -> str:
+        text = " ".join(str(exc).split())
+        if len(text) > 120:
+            text = text[:117] + "..."
+        return f"{type(exc).__name__}: {text}"

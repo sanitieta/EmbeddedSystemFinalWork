@@ -774,7 +774,6 @@ void ProcessUartCommand(void)
 
         // 匹配 "HOUR MINUTE SECOND HH MM SS" 格式
         else if (g.uart.num_tokens == field_token_idx + 6 &&
-        if (g.uart.num_tokens == field_token_idx + 6 &&
             compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 3) &&
             compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "MINUTE", 3) &&
             compareFieldKeyword(&g.uart.tokens[field_token_idx + 2], "SECOND", 3))

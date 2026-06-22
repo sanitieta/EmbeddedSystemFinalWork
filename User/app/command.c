@@ -1136,33 +1136,47 @@ void ProcessUartCommand(void)
         }
         else // 根据指定字段返回信息
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK ");
+            /* 预扫描确认至少有一个合法字段再发 OK 前缀 */
+            found_arg = false;
             for (i = field_token_idx; i < g.uart.num_tokens; ++i)
             {
-                if (compareFieldKeyword(&g.uart.tokens[i], "YEAR", 3)) // "YEAR"
+                if (compareFieldKeyword(&g.uart.tokens[i], "YEAR", 3) ||
+                    compareFieldKeyword(&g.uart.tokens[i], "MONTH", 3) ||
+                    compareFieldKeyword(&g.uart.tokens[i], "DATE", 3))
                 {
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)((g.clock.year / 1000) % 10) + '0');
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)((g.clock.year / 100) % 10) + '0');
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)((g.clock.year / 10) % 10) + '0');
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.year % 10) + '0');
                     found_arg = true;
-                }
-                else if (compareFieldKeyword(&g.uart.tokens[i], "MONTH", 3)) // "MONTH"
-                {
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.month / 10) + '0');
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.month % 10) + '0');
-                    found_arg = true;
-                }
-                else if (compareFieldKeyword(&g.uart.tokens[i], "DATE", 3)) // "DATE" (日)
-                {
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.day / 10) + '0');
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.day % 10) + '0');
-                    found_arg = true;
+                    break;
                 }
             }
             if (!found_arg)
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR PARAM");
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
+            {
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR PARAM\r\n");
+            }
+            else
+            {
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK ");
+                for (i = field_token_idx; i < g.uart.num_tokens; ++i)
+                {
+                    if (compareFieldKeyword(&g.uart.tokens[i], "YEAR", 3)) // "YEAR"
+                    {
+                        UARTCharPutBlocking(UART0_BASE, (uint8_t)((g.clock.year / 1000) % 10) + '0');
+                        UARTCharPutBlocking(UART0_BASE, (uint8_t)((g.clock.year / 100) % 10) + '0');
+                        UARTCharPutBlocking(UART0_BASE, (uint8_t)((g.clock.year / 10) % 10) + '0');
+                        UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.year % 10) + '0');
+                    }
+                    else if (compareFieldKeyword(&g.uart.tokens[i], "MONTH", 3)) // "MONTH"
+                    {
+                        UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.month / 10) + '0');
+                        UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.month % 10) + '0');
+                    }
+                    else if (compareFieldKeyword(&g.uart.tokens[i], "DATE", 3)) // "DATE" (日)
+                    {
+                        UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.day / 10) + '0');
+                        UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.day % 10) + '0');
+                    }
+                }
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
+            }
         }
     }
 
@@ -1180,31 +1194,45 @@ void ProcessUartCommand(void)
         }
         else // 根据指定字段返回信息
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK ");
+            /* 预扫描确认至少有一个合法字段再发 OK 前缀 */
+            found_arg = false;
             for (i = field_token_idx; i < g.uart.num_tokens; ++i)
             {
-                if (compareFieldKeyword(&g.uart.tokens[i], "HOUR", 3)) // "HOUR"
+                if (compareFieldKeyword(&g.uart.tokens[i], "HOUR", 3) ||
+                    compareFieldKeyword(&g.uart.tokens[i], "MINUTE", 3) ||
+                    compareFieldKeyword(&g.uart.tokens[i], "SECOND", 3))
                 {
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.hh / 10) + '0');
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.hh % 10) + '0');
                     found_arg = true;
-                }
-                else if (compareFieldKeyword(&g.uart.tokens[i], "MINUTE", 3)) // "MINUTE"
-                {
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.mm / 10) + '0');
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.mm % 10) + '0');
-                    found_arg = true;
-                }
-                else if (compareFieldKeyword(&g.uart.tokens[i], "SECOND", 3)) // "SECOND"
-                {
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.ss / 10) + '0');
-                    UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.ss % 10) + '0');
-                    found_arg = true;
+                    break;
                 }
             }
             if (!found_arg)
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR PARAM");
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
+            {
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR PARAM\r\n");
+            }
+            else
+            {
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK ");
+                for (i = field_token_idx; i < g.uart.num_tokens; ++i)
+                {
+                    if (compareFieldKeyword(&g.uart.tokens[i], "HOUR", 3)) // "HOUR"
+                    {
+                        UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.hh / 10) + '0');
+                        UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.hh % 10) + '0');
+                    }
+                    else if (compareFieldKeyword(&g.uart.tokens[i], "MINUTE", 3)) // "MINUTE"
+                    {
+                        UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.mm / 10) + '0');
+                        UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.mm % 10) + '0');
+                    }
+                    else if (compareFieldKeyword(&g.uart.tokens[i], "SECOND", 3)) // "SECOND"
+                    {
+                        UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.ss / 10) + '0');
+                        UARTCharPutBlocking(UART0_BASE, (uint8_t)(g.clock.ss % 10) + '0');
+                    }
+                }
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
+            }
         }
     }
 

@@ -49,27 +49,36 @@ class LogPanel(QWidget):
         self.log_edit.setFont(QFont("Consolas", 10))
         layout.addWidget(self.log_edit)
 
+        # 应用样式
+        self._apply_log_styles()
+
         # 连接信号
         self.btn_clear.clicked.connect(self.log_edit.clear)
         self.btn_export.clicked.connect(self._export_log)
 
     # ── 公开方法 ──
 
+    # 调色板一致的颜色常量 (基于 Fusion dark 主题的和谐色调)
+    COLOR_TX      = QColor("#3498DB")   # 发送命令 — 柔和蓝
+    COLOR_RX      = QColor("#2ECC71")   # 接收应答 — 翠绿
+    COLOR_EVENT   = QColor("#9B59B6")   # 接收事件 — 深紫
+    COLOR_ERROR   = QColor("#E74C3C")   # 错误信息 — 珊瑚红
+
     def add_tx_command(self, line: str):
         """添加发送命令 (蓝色)"""
-        self._append_line(line, "→", QColor("#0066CC"))
+        self._append_line(line, "→", self.COLOR_TX)
 
     def add_rx_response(self, line: str):
         """添加接收应答 (绿色)"""
-        self._append_line(line, "←", QColor("#008800"))
+        self._append_line(line, "←", self.COLOR_RX)
 
     def add_rx_event(self, line: str):
         """添加接收事件 (紫色)"""
-        self._append_line(line, "←", QColor("#8800AA"))
+        self._append_line(line, "←", self.COLOR_EVENT)
 
     def add_error(self, line: str):
         """添加错误信息 (红色)"""
-        self._append_line(line, "!", QColor("#CC0000"))
+        self._append_line(line, "!", self.COLOR_ERROR)
 
     # ── 内部实现 ──
 
@@ -98,6 +107,32 @@ class LogPanel(QWidget):
             cursor.insertText(entry, fmt)
             # 自动滚动到底部
             self.log_edit.setTextCursor(cursor)
+
+    # ── 样式 ──
+
+    def _apply_log_styles(self):
+        """应用与调色板一致的控件样式"""
+        # 复选框: 与整体 Fusion dark 主题一致
+        self.chk_newest_first.setStyleSheet("""
+            QCheckBox {
+                color: #CCCCCC;
+                spacing: 6px;
+            }
+            QCheckBox::indicator {
+                width: 14px;
+                height: 14px;
+            }
+        """)
+
+        # 日志编辑区背景与主窗口背景一致
+        self.log_edit.setStyleSheet("""
+            QPlainTextEdit {
+                background-color: #232629;
+                color: #E0E0E0;
+                border: 1px solid #555555;
+                border-radius: 3px;
+            }
+        """)
 
     def _export_log(self):
         """导出日志到文件"""

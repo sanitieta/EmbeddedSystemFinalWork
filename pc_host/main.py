@@ -65,6 +65,9 @@ class MainWindow(QMainWindow):
         self._build_central_widget()
         self._build_statusbar()
 
+        # ---- 加载主题 (在 UI 构建完成后) ----
+        self._load_theme()
+
         # ---- 连接信号 ----
         self._connect_signals()
 
@@ -120,6 +123,27 @@ class MainWindow(QMainWindow):
         self.btn_dashboard.setToolTip("查看事件统计图表")
         toolbar.addWidget(self.btn_dashboard)
 
+        # ---- 功能按钮 subtle icon-like 样式 ----
+        _action_btn_style = (
+            "QPushButton {"
+            "  padding: 5px 14px;"
+            "  border: 1px solid transparent;"
+            "  border-radius: 4px;"
+            "  background: transparent;"
+            "  font-weight: normal;"
+            "}"
+            "QPushButton:hover {"
+            "  background: #e0e0e0;"
+            "  border-color: #c0c0c0;"
+            "}"
+            "QPushButton:pressed {"
+            "  background: #d0d0d0;"
+            "}"
+        )
+        self.btn_ntp.setStyleSheet(_action_btn_style)
+        self.btn_weather.setStyleSheet(_action_btn_style)
+        self.btn_dashboard.setStyleSheet(_action_btn_style)
+
     def _build_central_widget(self):
         """构建中央区域: QSplitter (TwinPanel | ControlPanel | LogPanel)"""
         splitter = QSplitter(Qt.Horizontal)
@@ -146,7 +170,7 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self.status_bar)
 
         self.conn_label = QLabel("○ 未连接")
-        self.conn_label.setStyleSheet("color: gray; font-weight: bold; padding: 0 8px;")
+        self.conn_label.setStyleSheet("color: #999999; font-weight: bold; padding: 0 8px;")
         self.status_bar.addPermanentWidget(self.conn_label)
 
         self.fmt_label = QLabel("FORMAT: LEFT")
@@ -166,8 +190,21 @@ class MainWindow(QMainWindow):
         self.status_bar.addPermanentWidget(self.ping_label)
 
         self.last_rx_label = QLabel("最后收到: --")
-        self.last_rx_label.setStyleSheet("color: #666666; padding: 0 8px;")
+        self.last_rx_label.setStyleSheet("color: #888888; padding: 0 8px;")
         self.status_bar.addPermanentWidget(self.last_rx_label)
+
+    def _load_theme(self):
+        """加载 pc_host/theme.qss 并应用到全局样式表。如果文件缺失则记录警告并继续。"""
+        theme_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "theme.qss")
+        if os.path.exists(theme_path):
+            try:
+                with open(theme_path, "r", encoding="utf-8") as f:
+                    qss = f.read()
+                QApplication.instance().setStyleSheet(qss)
+            except OSError as e:
+                self.log_panel.add_error(f"加载 theme.qss 失败: {e}")
+        else:
+            self.log_panel.add_error("theme.qss 未找到，使用默认 Fusion 样式")
 
     # ═══════════════════════════════════════════════════════════════
     # 信号连接
@@ -400,7 +437,7 @@ class MainWindow(QMainWindow):
 
         elif etype == "ALARM":
             self.alarm_label.setText("ALARM: RINGING")
-            self.alarm_label.setStyleSheet("color: red; font-weight: bold; padding: 0 8px;")
+            self.alarm_label.setStyleSheet("color: #E53935; font-weight: bold; padding: 0 8px;")
             self.dashboard.log_event("ALARM")
 
         elif etype == "ALARM_OFF":
@@ -479,11 +516,11 @@ class MainWindow(QMainWindow):
         port = self.serial_worker.port_name
         if connected:
             self.conn_label.setText(f"● 已连接 {port}")
-            self.conn_label.setStyleSheet("color: green; font-weight: bold; padding: 0 8px;")
+            self.conn_label.setStyleSheet("color: #4CAF50; font-weight: bold; padding: 0 8px;")
             self.btn_connect.setText("断开")
         else:
             self.conn_label.setText("○ 未连接")
-            self.conn_label.setStyleSheet("color: gray; font-weight: bold; padding: 0 8px;")
+            self.conn_label.setStyleSheet("color: #999999; font-weight: bold; padding: 0 8px;")
             self.btn_connect.setText("连接")
             self.ping_label.setText("PING: --ms")
             # 如果有端口错误，显示在状态栏和日志
@@ -529,6 +566,11 @@ class MainWindow(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+
+    theme_path = os.path.join(os.path.dirname(__file__), "theme.qss")
+    if os.path.exists(theme_path):
+        with open(theme_path, "r", encoding="utf-8") as f:
+            app.setStyleSheet(f.read())
 
     window = MainWindow()
     window.show()

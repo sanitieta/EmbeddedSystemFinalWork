@@ -128,8 +128,28 @@ if _MPL_AVAILABLE:
 
     # 全局 matplotlib 配置
     plt.style.use("dark_background")
-    matplotlib.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei"]
-    matplotlib.rcParams["axes.unicode_minus"] = False
+
+    # 覆盖 facecolor 以匹配 Qt Fusion dark 主题调色板
+    MATPLOTLIB_BG        = "#31363B"   # figure facecolor — 匹配主窗口背景
+    MATPLOTLIB_AXES_BG   = "#232629"   # axes facecolor — 匹配输入控件背景 (略深)
+    MATPLOTLIB_TEXT      = "#EFF0F1"   # 文本色 — 匹配 Fusion dark 前景
+    MATPLOTLIB_GRID      = "#555555"   # 网格线
+
+    matplotlib.rcParams.update({
+        "figure.facecolor":            MATPLOTLIB_BG,
+        "axes.facecolor":              MATPLOTLIB_AXES_BG,
+        "axes.edgecolor":              MATPLOTLIB_GRID,
+        "axes.labelcolor":             MATPLOTLIB_TEXT,
+        "text.color":                  MATPLOTLIB_TEXT,
+        "xtick.color":                 MATPLOTLIB_TEXT,
+        "ytick.color":                 MATPLOTLIB_TEXT,
+        "grid.color":                  MATPLOTLIB_GRID,
+        "grid.alpha":                  0.3,
+        "legend.facecolor":            MATPLOTLIB_AXES_BG,
+        "legend.edgecolor":            MATPLOTLIB_GRID,
+        "font.sans-serif":             ["Microsoft YaHei", "SimHei"],
+        "axes.unicode_minus":          False,
+    })
 
     # 按键顺序（横向柱状图从上到下的显示顺序）
     _KEY_ORDER = ["K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8",

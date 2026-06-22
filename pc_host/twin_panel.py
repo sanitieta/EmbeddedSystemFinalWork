@@ -37,6 +37,7 @@ from PyQt5.QtGui import (
     QFont,
     QPainter,
     QPainterPath,
+    QPen,
     QRadialGradient,
     QPaintEvent,
 )
@@ -111,7 +112,9 @@ _SEGMENT_BIT_TO_NAME: dict[int, str] = {
 # Colours
 _COLOR_ON: QColor = QColor("#FF3030")   # bright red
 _COLOR_OFF: QColor = QColor("#220000")   # dim dark red (visible but clearly off)
-_COLOR_BG: QColor = QColor("#0A0A0A")   # near-black background
+_COLOR_BG: QColor = QColor("#0D0D0D")   # near-black background (not pure black)
+_COLOR_GLOW: QColor = QColor("#FF6040")  # lighter accent for tube glow effect
+_COLOR_GLOW.setAlpha(60)
 
 # Decimal-point centre in unit-square coordinates
 _DP_CENTER: QPointF = QPointF(0.92, 0.88)
@@ -200,7 +203,7 @@ class SevenSegWidget(QWidget):
     # -- paint -------------------------------------------------------------
 
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N803
-        """Draw all seven segments and the decimal point."""
+        """Draw all seven segments and the decimal point with glow effect."""
         w: int = self.width()
         h: int = self.height()
 
@@ -211,7 +214,7 @@ class SevenSegWidget(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # Background
+        # Background — fill entire widget area first
         painter.fillRect(self.rect(), _COLOR_BG)
 
         # Scale to unit square
@@ -219,8 +222,31 @@ class SevenSegWidget(QWidget):
         painter.translate(margin, margin)
         painter.scale(seg_w, seg_h)
 
-        painter.setPen(Qt.NoPen)
+        # Rounded rect behind the digit for subtle depth
+        bg_rect = QRectF(0.0, 0.0, 1.0, 1.0)
+        painter.setPen(QPen(QColor("#1A1A1A"), 0.015))
+        painter.setBrush(QBrush(_COLOR_BG))
+        painter.drawRoundedRect(bg_rect, 0.08, 0.08)
 
+        # ---- Glow pass: only active segments, wider semi-transparent stroke ----
+        for bit_val, name in _SEGMENT_BIT_TO_NAME.items():
+            on: bool = bool(self._segments & bit_val)
+            if not on:
+                continue
+            pts: list[tuple[float, float]] = _SEGMENT_POINTS.get(name, [])
+            if not pts:
+                continue
+            path = QPainterPath()
+            path.moveTo(QPointF(*pts[0]))
+            for pt in pts[1:]:
+                path.lineTo(QPointF(*pt))
+            path.closeSubpath()
+            painter.setPen(QPen(_COLOR_GLOW, 0.07, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawPath(path)
+
+        # ---- Crisp pass: all segments filled ----
+        painter.setPen(Qt.NoPen)
         for bit_val, name in _SEGMENT_BIT_TO_NAME.items():
             on: bool = bool(self._segments & bit_val)
             color: QColor = _COLOR_ON if on else _COLOR_OFF
@@ -237,7 +263,17 @@ class SevenSegWidget(QWidget):
             path.closeSubpath()
             painter.drawPath(path)
 
-        # Decimal point — small filled ellipse
+        # Decimal point with glow when active
+        if self._dp:
+            # Glow ellipse behind dp
+            glow_dp = QColor("#FF6040")
+            glow_dp.setAlpha(60)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QBrush(glow_dp))
+            painter.drawEllipse(
+                QPointF(_DP_CENTER.x(), _DP_CENTER.y()),
+                _DP_RX + 0.03, _DP_RY + 0.03,
+            )
         dp_color: QColor = _COLOR_ON if self._dp else _COLOR_OFF
         painter.setBrush(QBrush(dp_color))
         painter.drawEllipse(_DP_CENTER, _DP_RX, _DP_RY)
@@ -267,25 +303,36 @@ class LedIndicator(QWidget):
         self.update()
 
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N803
-        """Draw the LED as a radial-gradient filled circle."""
+        """Draw the LED as a radial-gradient filled circle with glow."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
         center: QPointF = QRectF(self.rect()).center()
         radius: float = min(self.width(), self.height()) / 2.0 - 2.0
 
-        gradient = QRadialGradient(center, radius)
         if self._on:
+            # Outer glow ring — semi-transparent larger circle
+            glow_radius = radius + 4.0
+            glow = QRadialGradient(center, glow_radius)
+            glow.setColorAt(0.0, QColor(0, 255, 0, 70))
+            glow.setColorAt(0.6, QColor(0, 200, 0, 25))
+            glow.setColorAt(1.0, QColor(0, 0, 0, 0))
+            painter.setBrush(QBrush(glow))
+            painter.setPen(Qt.NoPen)
+            painter.drawEllipse(center, glow_radius, glow_radius)
+
+            # Main LED gradient
+            gradient = QRadialGradient(center, radius)
             gradient.setColorAt(0.0, QColor("#00FF00"))
             gradient.setColorAt(0.6, QColor("#00CC00"))
             gradient.setColorAt(1.0, QColor("#003300"))
+            painter.setBrush(QBrush(gradient))
+            painter.drawEllipse(center, radius, radius)
         else:
-            gradient.setColorAt(0.0, QColor("#444444"))
-            gradient.setColorAt(1.0, QColor("#111111"))
-
-        painter.setBrush(QBrush(gradient))
-        painter.setPen(Qt.NoPen)
-        painter.drawEllipse(center, radius, radius)
+            # Faint outline so the LED is always locatable
+            painter.setPen(QPen(QColor("#333333"), 1))
+            painter.setBrush(QBrush(QColor("#1A1A1A")))
+            painter.drawEllipse(center, radius, radius)
 
 
 # ---------------------------------------------------------------------------
@@ -326,6 +373,12 @@ class TwinPanel(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("MCU Mirror (Digital Twin)")
+
+        # Panel background — slightly lighter than digit bg for contrast
+        palette = self.palette()
+        palette.setColor(self.backgroundRole(), QColor("#141414"))
+        self.setPalette(palette)
+        self.setAutoFillBackground(True)
 
         # Child widgets
         self.seg_widgets: list[SevenSegWidget] = []
@@ -393,6 +446,23 @@ class TwinPanel(QWidget):
             btn = QPushButton(f"K{i + 1}\n{name}")
             btn.setMinimumSize(70, 50)
             btn.setFont(QFont("Microsoft YaHei", 8))
+            btn.setStyleSheet(
+                "QPushButton {"
+                "  background-color: #1E1E1E;"
+                "  color: #AAAAAA;"
+                "  border: 1px solid #3A3A3A;"
+                "  border-radius: 4px;"
+                "  font-family: 'Microsoft YaHei';"
+                "}"
+                "QPushButton:hover {"
+                "  background-color: #2E2E2E;"
+                "  color: #DDDDDD;"
+                "  border: 1px solid #555555;"
+                "}"
+                "QPushButton:pressed {"
+                "  background-color: #3A3A3A;"
+                "}"
+            )
             # Lambda default-argument captures `name` at definition time
             btn.clicked.connect(lambda checked, n=name: self._on_key_clicked(n))
             key_grid.addWidget(btn, row, col)
@@ -427,13 +497,19 @@ class TwinPanel(QWidget):
         btn.setFont(QFont("Microsoft YaHei", 9, QFont.Bold))
         btn.setStyleSheet(
             "QPushButton {"
-            "  background-color: #2A4A6B;"
-            "  color: white;"
-            "  border: 2px solid #4A8AD4;"
-            "  border-radius: 6px;"
+            "  background-color: #1A2A3A;"
+            "  color: #CCDDEE;"
+            "  border: 1px solid #3A5A8A;"
+            "  border-radius: 4px;"
+            "  font-family: 'Microsoft YaHei';"
             "}"
             "QPushButton:hover {"
-            "  background-color: #3A5A7B;"
+            "  background-color: #253545;"
+            "  color: #FFFFFF;"
+            "  border: 1px solid #5A8ACA;"
+            "}"
+            "QPushButton:pressed {"
+            "  background-color: #304050;"
             "}"
         )
         return btn
@@ -508,8 +584,9 @@ class TwinPanel(QWidget):
         btn.setStyleSheet(
             original_style
             + " QPushButton {"
-            "  background-color: #FFD700;"
-            "  border: 2px solid #FFA500;"
+            "  background-color: #E08020;"
+            "  color: #FFFFFF;"
+            "  border: 2px solid #FFA040;"
             "}"
         )
 

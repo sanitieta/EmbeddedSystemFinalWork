@@ -22,6 +22,7 @@ class SerialWorker(QThread):
     line_received = pyqtSignal(str)        # 收到一个完整行 (已去换行符)
     connection_changed = pyqtSignal(bool)  # True=已连接, False=已断开
     latency_updated = pyqtSignal(int)      # 往返延迟 (ms)
+    heartbeat_sent = pyqtSignal(str)       # 后台心跳已发送，供 UI 记录 TX 日志
     port_list_updated = pyqtSignal(list)   # COM 口列表更新
     port_error = pyqtSignal(str)           # 端口错误消息
 
@@ -211,6 +212,7 @@ class SerialWorker(QThread):
             with QMutexLocker(self._tx_mutex):
                 try:
                     self.serial.write(b"*PING\r\n")
+                    self.heartbeat_sent.emit("*PING")
                 except serial.SerialException:
                     pass
 

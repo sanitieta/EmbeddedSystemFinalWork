@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QMessageBox, QSplitter,
     QStatusBar, QLabel, QToolBar, QComboBox, QPushButton,
-    QWidget, QVBoxLayout,
+    QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy,
 )
 from PyQt5.QtCore import Qt, QTimer
 
@@ -38,12 +38,15 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("S800 智能互联时钟 — PC 上位机")
-        self.resize(1280, 900)
+        self.setObjectName("MainWindow")
+        self.setWindowTitle("S800 Device Console")
+        self.resize(1440, 920)
+        self.setMinimumSize(1160, 740)
 
         # ---- 状态缓存 ----
         self._current_format: str = "LEFT"
         self._alarm_time: str = ""
+        self._dashboard_window: QWidget | None = None
 
         # ---- 核心组件 ----
         self.serial_worker = SerialWorker()
@@ -91,107 +94,179 @@ class MainWindow(QMainWindow):
 
     def _build_toolbar(self):
         """构建顶部工具栏"""
-        toolbar = QToolBar("主工具栏")
+        toolbar = QToolBar("Application Header")
+        toolbar.setObjectName("appHeader")
         toolbar.setMovable(False)
+        toolbar.setFloatable(False)
         self.addToolBar(toolbar)
 
-        toolbar.addWidget(QLabel("COM: "))
-        self.combo_com = QComboBox()
-        self.combo_com.setMinimumWidth(130)
-        self.combo_com.setToolTip("选择串口")
-        toolbar.addWidget(self.combo_com)
+        brand = QWidget()
+        brand.setObjectName("brandBlock")
+        brand_layout = QVBoxLayout(brand)
+        brand_layout.setContentsMargins(0, 0, 22, 0)
+        brand_layout.setSpacing(0)
+        brand_title = QLabel("S800")
+        brand_title.setObjectName("brandTitle")
+        brand_subtitle = QLabel("DEVICE CONSOLE  /  TM4C1294")
+        brand_subtitle.setObjectName("brandSubtitle")
+        brand_layout.addWidget(brand_title)
+        brand_layout.addWidget(brand_subtitle)
+        toolbar.addWidget(brand)
 
-        self.btn_refresh = QPushButton("刷新")
+        port_block = QWidget()
+        port_block.setObjectName("portBlock")
+        port_layout = QVBoxLayout(port_block)
+        port_layout.setContentsMargins(16, 0, 0, 0)
+        port_layout.setSpacing(3)
+        port_caption = QLabel("SERIAL PORT")
+        port_caption.setObjectName("toolbarCaption")
+        port_row = QHBoxLayout()
+        port_row.setContentsMargins(0, 0, 0, 0)
+        port_row.setSpacing(6)
+        self.combo_com = QComboBox()
+        self.combo_com.setMinimumWidth(150)
+        self.combo_com.setToolTip("选择串口")
+        port_row.addWidget(self.combo_com)
+
+        self.btn_refresh = QPushButton("↻")
+        self.btn_refresh.setObjectName("refreshButton")
         self.btn_refresh.setToolTip("刷新 COM 口列表")
-        toolbar.addWidget(self.btn_refresh)
+        port_row.addWidget(self.btn_refresh)
 
         self.btn_connect = QPushButton("连接")
+        self.btn_connect.setObjectName("connectButton")
+        self.btn_connect.setProperty("primary", True)
+        self.btn_connect.setMinimumWidth(88)
         self.btn_connect.setToolTip("连接/断开串口")
-        toolbar.addWidget(self.btn_connect)
+        port_row.addWidget(self.btn_connect)
+        port_layout.addWidget(port_caption)
+        port_layout.addLayout(port_row)
+        toolbar.addWidget(port_block)
 
-        toolbar.addSeparator()
+        spacer = QWidget()
+        spacer.setObjectName("toolbarSpacer")
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        toolbar.addWidget(spacer)
 
-        self.btn_ntp = QPushButton("NTP 对时")
+        quick_block = QWidget()
+        quick_block.setObjectName("quickActions")
+        quick_layout = QVBoxLayout(quick_block)
+        quick_layout.setContentsMargins(0, 0, 0, 0)
+        quick_layout.setSpacing(3)
+        quick_caption = QLabel("QUICK ACTIONS")
+        quick_caption.setObjectName("toolbarCaption")
+        quick_row = QHBoxLayout()
+        quick_row.setContentsMargins(0, 0, 0, 0)
+        quick_row.setSpacing(6)
+
+        self.btn_ntp = QPushButton("◷  NTP 对时")
+        self.btn_ntp.setProperty("toolbarAction", True)
         self.btn_ntp.setToolTip("从 NTP 服务器同步时间到 MCU")
-        toolbar.addWidget(self.btn_ntp)
+        quick_row.addWidget(self.btn_ntp)
 
-        self.btn_weather = QPushButton("刷新天气")
+        self.btn_weather = QPushButton("☁  天气")
+        self.btn_weather.setProperty("toolbarAction", True)
         self.btn_weather.setToolTip("立即从 wttr.in 获取天气")
-        toolbar.addWidget(self.btn_weather)
+        quick_row.addWidget(self.btn_weather)
 
-        self.btn_dashboard = QPushButton("数据看板")
+        self.btn_dashboard = QPushButton("⌁  数据看板")
+        self.btn_dashboard.setProperty("toolbarAction", True)
         self.btn_dashboard.setToolTip("查看事件统计图表")
-        toolbar.addWidget(self.btn_dashboard)
-
-        # ---- 功能按钮 subtle icon-like 样式 ----
-        _action_btn_style = (
-            "QPushButton {"
-            "  padding: 5px 14px;"
-            "  border: 1px solid transparent;"
-            "  border-radius: 4px;"
-            "  background: transparent;"
-            "  font-weight: normal;"
-            "}"
-            "QPushButton:hover {"
-            "  background: #e0e0e0;"
-            "  border-color: #c0c0c0;"
-            "}"
-            "QPushButton:pressed {"
-            "  background: #d0d0d0;"
-            "}"
-        )
-        self.btn_ntp.setStyleSheet(_action_btn_style)
-        self.btn_weather.setStyleSheet(_action_btn_style)
-        self.btn_dashboard.setStyleSheet(_action_btn_style)
+        quick_row.addWidget(self.btn_dashboard)
+        quick_layout.addWidget(quick_caption)
+        quick_layout.addLayout(quick_row)
+        toolbar.addWidget(quick_block)
 
     def _build_central_widget(self):
-        """构建中央区域: QSplitter (TwinPanel | ControlPanel | LogPanel)"""
-        splitter = QSplitter(Qt.Horizontal)
+        """构建中央区域: 设备孪生 | (控制面板 / UART 终端)。"""
+        shell = QWidget()
+        shell.setObjectName("workspaceShell")
+        shell_layout = QVBoxLayout(shell)
+        shell_layout.setContentsMargins(16, 16, 16, 14)
+        shell_layout.setSpacing(10)
 
-        self.twin_panel.setMinimumWidth(420)
+        heading_row = QHBoxLayout()
+        heading = QVBoxLayout()
+        heading.setSpacing(1)
+        workspace_title = QLabel("设备工作台")
+        workspace_title.setObjectName("workspaceTitle")
+        workspace_subtitle = QLabel("实时镜像、设备控制与 UART 遥测")
+        workspace_subtitle.setObjectName("workspaceSubtitle")
+        heading.addWidget(workspace_title)
+        heading.addWidget(workspace_subtitle)
+        heading_row.addLayout(heading)
+        heading_row.addStretch()
+        protocol_badge = QLabel("UART  ·  115200 8N1")
+        protocol_badge.setObjectName("protocolBadge")
+        heading_row.addWidget(protocol_badge, alignment=Qt.AlignVCenter)
+        shell_layout.addLayout(heading_row)
+
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.setObjectName("workspaceSplitter")
+        splitter.setChildrenCollapsible(False)
+
+        self.twin_panel.setMinimumWidth(540)
         splitter.addWidget(self.twin_panel)
 
-        splitter.addWidget(self.control_panel)
+        operations = QSplitter(Qt.Vertical)
+        operations.setObjectName("operationsSplitter")
+        operations.setChildrenCollapsible(False)
+        self.control_panel.setMinimumHeight(330)
+        self.log_panel.setMinimumHeight(190)
+        operations.addWidget(self.control_panel)
+        operations.addWidget(self.log_panel)
+        operations.setSizes([520, 260])
+        operations.setStretchFactor(0, 2)
+        operations.setStretchFactor(1, 1)
+        splitter.addWidget(operations)
 
-        splitter.addWidget(self.log_panel)
+        splitter.setSizes([590, 790])
+        splitter.setStretchFactor(0, 4)
+        splitter.setStretchFactor(1, 6)
 
-        # TwinPanel 初始宽度约 520px, 其余均分
-        splitter.setSizes([520, 380, 380])
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        splitter.setStretchFactor(2, 1)
-
-        self.setCentralWidget(splitter)
+        shell_layout.addWidget(splitter)
+        self.setCentralWidget(shell)
         self._splitter = splitter
+        self._operations_splitter = operations
 
     def _build_statusbar(self):
         """构建状态栏: 5 个永久标签"""
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
 
-        self.conn_label = QLabel("○ 未连接")
-        self.conn_label.setStyleSheet("color: #999999; font-weight: bold; padding: 0 8px;")
+        self.conn_label = QLabel("●  OFFLINE")
+        self.conn_label.setProperty("statusChip", True)
+        self.conn_label.setProperty("state", "offline")
         self.status_bar.addPermanentWidget(self.conn_label)
 
         self.fmt_label = QLabel("FORMAT: LEFT")
-        self.fmt_label.setStyleSheet("padding: 0 8px;")
+        self.fmt_label.setProperty("statusChip", True)
         self.status_bar.addPermanentWidget(self.fmt_label)
 
         self.mode_label = QLabel("MODE: DAY")
-        self.mode_label.setStyleSheet("padding: 0 8px;")
+        self.mode_label.setProperty("statusChip", True)
         self.status_bar.addPermanentWidget(self.mode_label)
 
         self.alarm_label = QLabel("ALARM: 未设置")
-        self.alarm_label.setStyleSheet("padding: 0 8px;")
+        self.alarm_label.setProperty("statusChip", True)
         self.status_bar.addPermanentWidget(self.alarm_label)
 
         self.ping_label = QLabel("PING: --ms")
-        self.ping_label.setStyleSheet("padding: 0 8px;")
+        self.ping_label.setProperty("statusChip", True)
         self.status_bar.addPermanentWidget(self.ping_label)
 
         self.last_rx_label = QLabel("最后收到: --")
-        self.last_rx_label.setStyleSheet("color: #888888; padding: 0 8px;")
+        self.last_rx_label.setProperty("statusChip", True)
+        self.last_rx_label.setProperty("muted", True)
         self.status_bar.addPermanentWidget(self.last_rx_label)
+
+    @staticmethod
+    def _set_widget_state(widget: QWidget, state: str) -> None:
+        """更新动态属性，并让 QSS 立即重新匹配选择器。"""
+        widget.setProperty("state", state)
+        widget.style().unpolish(widget)
+        widget.style().polish(widget)
+        widget.update()
 
     def _load_theme(self):
         """加载 pc_host/theme.qss 并应用到全局样式表。如果文件缺失则记录警告并继续。"""
@@ -218,6 +293,7 @@ class MainWindow(QMainWindow):
         sw.line_received.connect(self._on_line_received)
         sw.connection_changed.connect(self._on_connection_changed)
         sw.latency_updated.connect(self._on_latency_updated)
+        sw.heartbeat_sent.connect(self.log_panel.add_tx_command)
         sw.port_error.connect(self._on_port_error)
 
         # ControlPanel / TwinPanel 发送命令 → 日志 + SerialWorker
@@ -331,13 +407,15 @@ class MainWindow(QMainWindow):
             self.log_panel.add_error(f"天气: {msg}")
 
     def _on_dashboard(self):
-        """打开数据看板"""
-        self.status_bar.showMessage("数据看板 — 事件记录保存在 logs/events.csv", 3000)
-        # 尝试嵌入 matplotlib 图表对话框
+        """切换数据看板的打开/关闭状态。"""
         self._show_dashboard_dialog()
 
     def _show_dashboard_dialog(self):
-        """弹出数据看板对话框 (DashboardWindow with matplotlib charts)"""
+        """以单实例方式打开数据看板；已打开时再次调用则关闭。"""
+        if self._dashboard_window is not None:
+            self._dashboard_window.close()
+            return
+
         from dashboard import DashboardWindow
 
         # 确保至少有一条数据展示效果 (否则空图表让人困惑)
@@ -348,12 +426,18 @@ class MainWindow(QMainWindow):
         win = DashboardWindow(self.dashboard, self)
         win.setWindowTitle("数据可视化看板 (E4)")
         win.setAttribute(Qt.WA_DeleteOnClose)
+        win.destroyed.connect(self._on_dashboard_closed)
+        self._dashboard_window = win
         win.show()
+        self.btn_dashboard.setText("⌁  关闭看板")
+        self.btn_dashboard.setToolTip("关闭数据看板")
+        self.status_bar.showMessage("数据看板 — 事件记录保存在 logs/events.csv", 3000)
 
-        # 保持引用防止过早回收
-        if not hasattr(self, "_dashboard_windows"):
-            self._dashboard_windows = []
-        self._dashboard_windows.append(win)
+    def _on_dashboard_closed(self):
+        """看板销毁后恢复按钮和单实例状态。"""
+        self._dashboard_window = None
+        self.btn_dashboard.setText("⌁  数据看板")
+        self.btn_dashboard.setToolTip("查看事件统计图表")
 
     # ═══════════════════════════════════════════════════════════════
     # 命令发送处理
@@ -437,12 +521,12 @@ class MainWindow(QMainWindow):
 
         elif etype == "ALARM":
             self.alarm_label.setText("ALARM: RINGING")
-            self.alarm_label.setStyleSheet("color: #E53935; font-weight: bold; padding: 0 8px;")
+            self._set_widget_state(self.alarm_label, "danger")
             self.dashboard.log_event("ALARM")
 
         elif etype == "ALARM_OFF":
             # 恢复缓存的闹钟时间
-            self.alarm_label.setStyleSheet("padding: 0 8px;")
+            self._set_widget_state(self.alarm_label, "normal")
             if self._alarm_time:
                 self.alarm_label.setText(f"ALARM: {self._alarm_time}")
             else:
@@ -473,11 +557,11 @@ class MainWindow(QMainWindow):
             if alarm_val and alarm_val not in ("--:--:--", "DISABLED", "OFF", ""):
                 self._alarm_time = alarm_val
                 self.alarm_label.setText(f"ALARM: {alarm_val}")
-                self.alarm_label.setStyleSheet("padding: 0 8px;")
+                self._set_widget_state(self.alarm_label, "normal")
             else:
                 self._alarm_time = ""
                 self.alarm_label.setText("ALARM: 未设置")
-                self.alarm_label.setStyleSheet("padding: 0 8px;")
+                self._set_widget_state(self.alarm_label, "normal")
 
         elif upper.startswith("MOTOR:"):
             self.status_bar.showMessage(f"电机: {line.strip()}", 3000)
@@ -515,19 +599,24 @@ class MainWindow(QMainWindow):
         """串口连接状态变更"""
         port = self.serial_worker.port_name
         if connected:
-            self.conn_label.setText(f"● 已连接 {port}")
-            self.conn_label.setStyleSheet("color: #4CAF50; font-weight: bold; padding: 0 8px;")
+            self.conn_label.setText(f"●  ONLINE  ·  {port}")
+            self._set_widget_state(self.conn_label, "online")
             self.btn_connect.setText("断开")
+            self.btn_connect.setProperty("danger", True)
         else:
-            self.conn_label.setText("○ 未连接")
-            self.conn_label.setStyleSheet("color: #999999; font-weight: bold; padding: 0 8px;")
+            self.conn_label.setText("●  OFFLINE")
+            self._set_widget_state(self.conn_label, "offline")
             self.btn_connect.setText("连接")
+            self.btn_connect.setProperty("danger", False)
             self.ping_label.setText("PING: --ms")
             # 如果有端口错误，显示在状态栏和日志
             err = self.serial_worker.last_port_error
             if err:
                 self.status_bar.showMessage("端口错误: " + err, 8000)
                 self.log_panel.add_error("端口错误: " + err)
+
+        self.btn_connect.style().unpolish(self.btn_connect)
+        self.btn_connect.style().polish(self.btn_connect)
 
         # 启用/禁用控制面板控件
         self.control_panel.set_controls_enabled(connected)

@@ -25,19 +25,35 @@ class LogPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName("LogPanel")
         self.setWindowTitle("收发日志")
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 14, 18, 16)
+        layout.setSpacing(9)
 
         # 标题行
         header = QHBoxLayout()
-        header.addWidget(QLabel("收发日志"))
-        self.chk_newest_first = QCheckBox("最新在上")
+        header_text = QVBoxLayout()
+        header_text.setSpacing(0)
+        eyebrow = QLabel("UART TELEMETRY")
+        eyebrow.setObjectName("panelEyebrow")
+        title = QLabel("实时终端")
+        title.setObjectName("panelTitleSmall")
+        header_text.addWidget(eyebrow)
+        header_text.addWidget(title)
+        header.addLayout(header_text)
+        live = QLabel("●  STREAM")
+        live.setObjectName("streamBadge")
+        header.addWidget(live)
+        self.chk_newest_first = QCheckBox("最新优先")
         self.chk_newest_first.setChecked(True)
         header.addWidget(self.chk_newest_first)
         header.addStretch()
         self.btn_clear = QPushButton("清空")
         self.btn_export = QPushButton("导出")
+        self.btn_clear.setProperty("quiet", True)
+        self.btn_export.setProperty("quiet", True)
         header.addWidget(self.btn_clear)
         header.addWidget(self.btn_export)
         layout.addLayout(header)
@@ -46,7 +62,8 @@ class LogPanel(QWidget):
         self.log_edit = QPlainTextEdit()
         self.log_edit.setReadOnly(True)
         self.log_edit.setMaximumBlockCount(MAX_LINES)
-        self.log_edit.setFont(QFont("Consolas", 10))
+        self.log_edit.setFont(QFont("Cascadia Mono", 10))
+        self.log_edit.setPlaceholderText("等待设备数据流…")
         layout.addWidget(self.log_edit)
 
         # 应用样式
@@ -59,10 +76,10 @@ class LogPanel(QWidget):
     # ── 公开方法 ──
 
     # 调色板一致的颜色常量 (基于 Fusion dark 主题的和谐色调)
-    COLOR_TX      = QColor("#3498DB")   # 发送命令 — 柔和蓝
-    COLOR_RX      = QColor("#2ECC71")   # 接收应答 — 翠绿
-    COLOR_EVENT   = QColor("#9B59B6")   # 接收事件 — 深紫
-    COLOR_ERROR   = QColor("#E74C3C")   # 错误信息 — 珊瑚红
+    COLOR_TX      = QColor("#6EA8FE")   # 发送命令 — 蓝
+    COLOR_RX      = QColor("#5DE4C7")   # 接收应答 — 青绿
+    COLOR_EVENT   = QColor("#B79CFF")   # 接收事件 — 紫
+    COLOR_ERROR   = QColor("#FF6B7A")   # 错误信息 — 红
 
     def add_tx_command(self, line: str):
         """添加发送命令 (蓝色)"""
@@ -111,28 +128,8 @@ class LogPanel(QWidget):
     # ── 样式 ──
 
     def _apply_log_styles(self):
-        """应用与调色板一致的控件样式"""
-        # 复选框: 与整体 Fusion dark 主题一致
-        self.chk_newest_first.setStyleSheet("""
-            QCheckBox {
-                color: #CCCCCC;
-                spacing: 6px;
-            }
-            QCheckBox::indicator {
-                width: 14px;
-                height: 14px;
-            }
-        """)
-
-        # 日志编辑区背景与主窗口背景一致
-        self.log_edit.setStyleSheet("""
-            QPlainTextEdit {
-                background-color: #232629;
-                color: #E0E0E0;
-                border: 1px solid #555555;
-                border-radius: 3px;
-            }
-        """)
+        """视觉由全局主题统一控制；这里仅保留语义对象名。"""
+        self.log_edit.setObjectName("uartConsole")
 
     def _export_log(self):
         """导出日志到文件"""

@@ -5,7 +5,12 @@
 - 尊重系统代理；遇到 ProxyError/SSLError 时自动尝试直连
 - 严格校验 HTTP 状态和 JSON 结构
 - 保留最近一次成功结果，短时网络故障时使用缓存
-- USER2 将 ASCII 短消息和 LED5-LED7 编码下发到 MCU
+- USER2 将 ASCII 短消息和 3-bit LED5-LED7 天气编码下发到 MCU
+
+天气 LED 编码 (3-bit, 8 种):
+  SUNNY  0x80 (1 0 0)   CLOUDY 0x40 (0 1 0)   FOG   0x60 (0 1 1)
+  RAIN   0x20 (0 0 1)   SNOW   0xA0 (1 0 1)   STORM 0xC0 (1 1 0)
+  WEATHER 0xE0 (1 1 1) — 未知天气/默认
 """
 
 from __future__ import annotations
@@ -304,20 +309,24 @@ class WeatherHelper(QObject):
             and time.monotonic() - self._last_fetch_time <= WEATHER_CACHE_MAX_AGE_S
         )
 
+    # 3-bit 天气 LED 编码: LED7(0x80) LED6(0x40) LED5(0x20)
+    # 晴=SUNNY 云=CLOUDY 雾=FOG 雨=RAIN 雪=SNOW 雷=STORM 未知=WEATHER
+    _WEATHER_LED_MAP: dict[str, int] = {
+        "SUNNY":   0x80,  # 1 0 0
+        "CLOUDY":  0x40,  # 0 1 0
+        "FOG":     0x60,  # 0 1 1
+        "RAIN":    0x20,  # 0 0 1
+        "SNOW":    0xA0,  # 1 0 1
+        "STORM":   0xC0,  # 1 1 0
+        "WEATHER": 0xE0,  # 1 1 1 (unknown/default)
+    }
+
     def _compute_weather_led(self) -> int:
-        """LED5=降水，LED6=高温，LED7=晴天。"""
+        """将当前天气 snapshot 映射为 LED5-LED7 的 3-bit 编码。"""
         snapshot = self._snapshot
         if snapshot is None:
             return 0x00
-
-        led = 0x00
-        if snapshot.condition in {"RAIN", "SNOW", "STORM"}:
-            led |= 0x20
-        if snapshot.temperature_c > 35:
-            led |= 0x40
-        if snapshot.condition == "SUNNY":
-            led |= 0x80
-        return led
+        return self._WEATHER_LED_MAP.get(snapshot.condition, 0xE0)
 
     @staticmethod
     def _condition_from_wmo(code: int) -> tuple[str, str]:

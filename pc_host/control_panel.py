@@ -35,6 +35,7 @@ class ControlPanel(QWidget):
 
         self._build_ui()
         self._connect_signals()
+        self._apply_styles()
 
     # ── UI 构建 ──
 
@@ -79,6 +80,7 @@ class ControlPanel(QWidget):
         date_layout.addWidget(self.btn_date_get, 1, 5)
         date_group.setLayout(date_layout)
         layout.addWidget(date_group)
+        layout.addWidget(self._make_separator())
 
         # === 时间设置组 ===
         time_group = QGroupBox("时间设置 *SET:TIME")
@@ -117,6 +119,7 @@ class ControlPanel(QWidget):
         time_layout.addWidget(self.btn_time_get, 1, 5)
         time_group.setLayout(time_layout)
         layout.addWidget(time_group)
+        layout.addWidget(self._make_separator())
 
         # === 闹钟设置组 ===
         alarm_group = QGroupBox("闹钟设置 *SET:ALARM")
@@ -142,6 +145,7 @@ class ControlPanel(QWidget):
         alarm_layout.addWidget(self.btn_alarm_get, 1, 3, 1, 2)
         alarm_group.setLayout(alarm_layout)
         layout.addWidget(alarm_group)
+        layout.addWidget(self._make_separator())
 
         # === 显示/格式组 ===
         disp_group = QGroupBox("显示 & 格式")
@@ -164,6 +168,7 @@ class ControlPanel(QWidget):
         disp_layout.addWidget(self.btn_get_format)
         disp_group.setLayout(disp_layout)
         layout.addWidget(disp_group)
+        layout.addWidget(self._make_separator())
 
         # === 消息 & LED 组 ===
         msg_led_group = QGroupBox("消息 & LED")
@@ -186,6 +191,7 @@ class ControlPanel(QWidget):
         ml_layout.addWidget(self.btn_led_default)
         msg_led_group.setLayout(ml_layout)
         layout.addWidget(msg_led_group)
+        layout.addWidget(self._make_separator())
 
         # === 电机控制组 ===
         motor_group = QGroupBox("步进电机控制")
@@ -202,6 +208,7 @@ class ControlPanel(QWidget):
         motor_layout.addWidget(self.btn_motor_get)
         motor_group.setLayout(motor_layout)
         layout.addWidget(motor_group)
+        layout.addWidget(self._make_separator())
 
         # === 系统命令 & 演示组 ===
         sys_group = QGroupBox("系统 & 演示")
@@ -216,6 +223,7 @@ class ControlPanel(QWidget):
         sys_layout.addWidget(self.btn_ping)
 
         layout.addWidget(sys_group)
+        layout.addWidget(self._make_separator())
 
         demo_layout = QHBoxLayout()
         self.btn_demo_abbrev = QPushButton("缩写演示 (min-match)")
@@ -388,6 +396,67 @@ class ControlPanel(QWidget):
         实际使用时建议使用标准大写格式。
         """
         self.send_command.emit("*SeT:DaTe YeAr MoNtH dAtE 2025 6 15")
+
+    # ── 样式 ──
+
+    @staticmethod
+    def _make_separator() -> QFrame:
+        """创建分组之间的细分割线"""
+        line = QFrame()
+        line.setFrameShape(QFrame.HLine)
+        line.setFrameShadow(QFrame.Sunken)
+        line.setObjectName("group_separator")
+        return line
+
+    def _apply_styles(self):
+        """应用调色板一致的样式
+
+        - QGroupBox 标题使用调色板强调色 (#3DAEE9, 对应 Fusion dark highlight)
+        - 分割线采用低透明度, 保持视觉分隔但不过度突出
+        - 演示按钮使用斜体文字, 与正常命令按钮区分开
+        """
+        # Fusion dark palette accent color
+        ACCENT = "#3DAEE9"
+
+        self.setStyleSheet(f"""
+            QGroupBox::title {{
+                color: {ACCENT};
+                font-weight: bold;
+                padding-top: 2px;
+            }}
+            QGroupBox {{
+                border: 1px solid #555555;
+                border-radius: 4px;
+                margin-top: 12px;
+                padding-top: 14px;
+                font-weight: bold;
+            }}
+            QGroupBox#group_separator {{
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }}
+            QFrame#group_separator {{
+                color: #555555;
+                max-height: 1px;
+                margin: 2px 4px;
+            }}
+        """)
+
+        # 演示按钮: 斜体 + 虚线边框, 区分于正常命令按钮
+        demo_style = """
+            QPushButton {
+                border: 1px dashed #888888;
+                font-style: italic;
+                color: #CCCCCC;
+            }
+            QPushButton:hover {
+                border-color: #AAAAAA;
+                color: #FFFFFF;
+            }
+        """
+        self.btn_demo_abbrev.setStyleSheet(demo_style)
+        self.btn_demo_case.setStyleSheet(demo_style)
 
     # ── 控件使能控制 ──
 

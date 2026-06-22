@@ -106,6 +106,7 @@ static void FinishBootSequence(void)
     g.disp.led_takeover = false;
     g.disp.led_pattern = 0x00;
     g.disp.weather_code = 0x00;
+    g.disp.beep_until = 0;
 
     /* ── 消息 / 保存闪烁 / 长按 ── */
     g.disp.msg_active = false;

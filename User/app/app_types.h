@@ -142,6 +142,9 @@ typedef struct {
     uint32_t save_blink_timer;   // 保存闪烁定时器 (tick)
     bool     long_press_saving;  // 长按保存进行中标志
 
+    /* 远程蜂鸣 */
+    uint32_t beep_until;     // 蜂鸣截止 tick, 0 = 不蜂鸣 (ARMCC5 兼容)
+
     /* 启动初始化 */
     bool     init_flag;       // 初始化流程标志 (true=正在启动动画)
     uint8_t  init_step;       // 初始化步骤 (0=全亮, 1=全暗, 2=学号前半...)

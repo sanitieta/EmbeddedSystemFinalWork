@@ -236,5 +236,10 @@ class Protocol:
         return f"*SET:WEATHER {byte & 0xE0:02X}"
 
     @staticmethod
+    def build_set_beep(ms: int) -> str:
+        """远程蜂鸣 (10-5000 ms, MCU 自动停止)"""
+        return f"*SET:BEEP {max(10, min(5000, ms))}"
+
+    @staticmethod
     def build_ntp_sync() -> str:
         return "*NTP SYNC"

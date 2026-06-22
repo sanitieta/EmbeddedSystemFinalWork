@@ -44,6 +44,7 @@ app_state_t g = {
         .msg_scroll = false,   // 无滚动消息 (ARMCC5 兼容)
         .save_blink_active = false, // 无保存闪烁 (ARMCC5 兼容)
         .long_press_saving = false, // 无长按保存 (ARMCC5 兼容)
+        .beep_until = 0,       // 无远程蜂鸣 (ARMCC5 兼容)
         .ntp_synced = false,   // LED4: 尚未完成 NTP 对时
         .init_flag = true,     // 启动时进入初始化动画流程
         .init_step = 0,        // 初始化从步骤 0 开始 (ARMCC5 兼容)

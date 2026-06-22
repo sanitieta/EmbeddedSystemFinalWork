@@ -89,5 +89,13 @@ void App_RunOnce(void)
         }
         Display_UpdateStatusLeds();
     }
+
+    /* 远程蜂鸣超时检查 (非阻塞, 与闹钟/旋律互不干扰) */
+    if (g.disp.beep_until != 0 && (int32_t)(g.timer.tick - g.disp.beep_until) >= 0)
+    {
+        PWMStop();
+        g.disp.beep_until = 0;
+    }
+
     ProcessUartCommand();
 }

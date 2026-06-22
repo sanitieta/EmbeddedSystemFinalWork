@@ -106,6 +106,7 @@ static void ResetProtocolState(void)
     g.disp.led_takeover = false;
     g.disp.led_pattern = 0x00;
     g.disp.weather_code = 0x00;
+    g.disp.beep_until = 0;
     g.disp.ntp_synced = false;
     g.disp.msg_active = false;
     g.disp.msg_scroll = false;
@@ -1036,6 +1037,29 @@ void ProcessUartCommand(void)
         }
     }
 
+    // 处理 "*SET:BEEP" 命令 (远程蜂鸣, 10-5000 ms)
+    else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*SET:BEEP"))
+    {
+        if (g.uart.num_tokens == current_param_idx + 1)
+        {
+            int ms = atoi((char *)g.uart.tokens[current_param_idx].token_str);
+            if (ms >= 10 && ms <= 5000)
+            {
+                PWMStart(2400);  /* 2400 Hz 蜂鸣 */
+                g.disp.beep_until = g.timer.tick + (uint32_t)ms;
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
+            }
+            else
+            {
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR RANGE\r\n");
+            }
+        }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
+        }
+    }
+
     // 处理 "*SET:MODE" 命令 (夜间模式)
     else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*SET:MODE"))
     {
@@ -1461,6 +1485,7 @@ void ProcessUartCommand(void)
             "*SET:MSG <text>                           : Show temporary message (max 32 bytes).\r\n"
             "*SET:LED <hex2>                           : LED takeover; 00 restores default.\r\n"
             "*SET:WEATHER <hex2>                        : Weather LED5-7 indicator (no takeover).\r\n"
+            "*SET:BEEP <ms>                            : Remote beep 10-5000 ms at 2400 Hz.\r\n"
             "*SET:MODE NIGHT/DAY                       : Night/day mode.\r\n"
             "*SET:KEY FUNC/SHIFT/ADD/SAVE/DISP/SPEED/FORMAT/EXT/USER1/USER2 : Virtual key injection.\r\n"
             "*NTP SYNC                                 : Mark NTP sync complete; LED4 on.\r\n"

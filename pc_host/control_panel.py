@@ -242,6 +242,24 @@ class ControlPanel(QWidget):
         layout.addWidget(motor_group)
         layout.addWidget(self._make_separator())
 
+        # === 远程蜂鸣组 ===
+        beep_group = QGroupBox("远程蜂鸣  /  BEEP")
+        beep_layout = QHBoxLayout()
+        self.spin_beep_ms = QSpinBox()
+        self.spin_beep_ms.setRange(10, 5000)
+        self.spin_beep_ms.setValue(200)
+        self.spin_beep_ms.setSuffix(" ms")
+        self.spin_beep_ms.setToolTip("蜂鸣时长 10–5000 ms")
+        self.btn_beep = QPushButton("🔊 BEEP")
+        self.btn_beep.setToolTip("发送 *SET:BEEP <ms> 远程触发蜂鸣器")
+        beep_layout.addWidget(QLabel("时长:"))
+        beep_layout.addWidget(self.spin_beep_ms)
+        beep_layout.addWidget(self.btn_beep)
+        beep_layout.addStretch()
+        beep_group.setLayout(beep_layout)
+        layout.addWidget(beep_group)
+        layout.addWidget(self._make_separator())
+
         # === 系统命令 & 演示组 ===
         sys_group = QGroupBox("系统诊断  /  SYSTEM")
         sys_layout = QHBoxLayout()
@@ -319,6 +337,10 @@ class ControlPanel(QWidget):
             self.protocol.build_motor_rev()))
         self.btn_motor_get.clicked.connect(lambda: self.send_command.emit(
             self.protocol.build_get_motor()))
+
+        # 蜂鸣
+        self.btn_beep.clicked.connect(lambda: self.send_command.emit(
+            self.protocol.build_set_beep(self.spin_beep_ms.value())))
 
         # 系统
         self.btn_rst.clicked.connect(lambda: self.send_command.emit(

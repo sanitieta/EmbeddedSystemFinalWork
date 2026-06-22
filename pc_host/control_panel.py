@@ -418,10 +418,8 @@ class ControlPanel(QWidget):
         """发送最小匹配缩写命令
 
         MCU 命令解析器支持最小匹配 (min-match)：只要前缀能唯一确定一个 token 即可。
-        例如 "DAT" 匹配 "DATE", "YEA" 匹配 "YEAR", "MON" 匹配 "MONTH"。
-        实际使用时建议发送完整 token，仅测试时使用缩写。
         """
-        self.send_command.emit("*SET:DAT YEA MON 2025 6 15")
+        self.send_command.emit("*SET:TIME MIN SEC 11 22")
 
     def _on_demo_case(self):
         """发送大小写混合命令

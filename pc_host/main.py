@@ -11,6 +11,7 @@ S800/TM4C1294 智能互联时钟 — PC 上位机
 
 import sys
 import os
+from collections import deque
 
 # Ensure pc_host/ is on the path so we can import sibling modules
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -44,8 +45,11 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1160, 740)
 
         # ---- 状态缓存 ----
-        self._current_format: str = "LEFT"
+        self._current_format: str = ""
+        self._current_mode: str = ""
+        self._alarm_enabled: bool | None = None
         self._alarm_time: str = ""
+        self._pending_responses: deque[str] = deque()
         self._dashboard_window: QWidget | None = None
 
         # ---- 核心组件 ----
@@ -84,6 +88,12 @@ class MainWindow(QMainWindow):
         self._weather_timer = QTimer(self)
         self._weather_timer.timeout.connect(self._weather_fetch_callback)
         self._weather_timer.start(30 * 60 * 1000)
+
+        # ---- 设备状态轮询：补足 FORMAT 无主动事件的问题 ----
+        self._status_poll_timer = QTimer(self)
+        self._status_poll_timer.setInterval(2000)
+        self._status_poll_timer.timeout.connect(self._poll_device_status)
+        self._status_poll_timer.start()
 
         # ---- 启动后首次拉取天气 (延迟 1s 等串口就绪) ----
         QTimer.singleShot(1000, self._initial_weather_fetch)
@@ -250,7 +260,7 @@ class MainWindow(QMainWindow):
         self._operations_splitter = operations
 
     def _build_statusbar(self):
-        """构建状态栏: 5 个永久标签"""
+        """构建状态栏：连接、FORMAT、MODE、ALARM 使能四项。"""
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
 
@@ -259,26 +269,20 @@ class MainWindow(QMainWindow):
         self.conn_label.setProperty("state", "offline")
         self.status_bar.addPermanentWidget(self.conn_label)
 
-        self.fmt_label = QLabel("FORMAT: LEFT")
+        self.fmt_label = QLabel("FORMAT: --")
         self.fmt_label.setProperty("statusChip", True)
+        self.fmt_label.setProperty("state", "unknown")
         self.status_bar.addPermanentWidget(self.fmt_label)
 
-        self.mode_label = QLabel("MODE: DAY")
+        self.mode_label = QLabel("MODE: --")
         self.mode_label.setProperty("statusChip", True)
+        self.mode_label.setProperty("state", "unknown")
         self.status_bar.addPermanentWidget(self.mode_label)
 
-        self.alarm_label = QLabel("ALARM: 未设置")
+        self.alarm_label = QLabel("ALARM: --")
         self.alarm_label.setProperty("statusChip", True)
+        self.alarm_label.setProperty("state", "unknown")
         self.status_bar.addPermanentWidget(self.alarm_label)
-
-        self.ping_label = QLabel("PING: --ms")
-        self.ping_label.setProperty("statusChip", True)
-        self.status_bar.addPermanentWidget(self.ping_label)
-
-        self.last_rx_label = QLabel("最后收到: --")
-        self.last_rx_label.setProperty("statusChip", True)
-        self.last_rx_label.setProperty("muted", True)
-        self.status_bar.addPermanentWidget(self.last_rx_label)
 
     @staticmethod
     def _set_widget_state(widget: QWidget, state: str) -> None:
@@ -312,7 +316,6 @@ class MainWindow(QMainWindow):
         # SerialWorker → 主窗口
         sw.line_received.connect(self._on_line_received)
         sw.connection_changed.connect(self._on_connection_changed)
-        sw.latency_updated.connect(self._on_latency_updated)
         sw.heartbeat_sent.connect(self.log_panel.add_tx_command)
         sw.port_error.connect(self._on_port_error)
 
@@ -401,9 +404,7 @@ class MainWindow(QMainWindow):
                                         f"无法打开 {port}\n请检查端口是否被其他程序占用。")
             else:
                 self.status_bar.showMessage("已连接 " + port, 3000)
-                # 立即验证 MCU 响应
-                QTimer.singleShot(300, lambda: self.serial_worker.send_line("*GET:FORMAT"))
-                QTimer.singleShot(450, lambda: self.serial_worker.send_line("*GET:ALARM"))
+                # 连接状态信号中会立即拉取设备状态。
 
     def _on_ntp_sync(self):
         """手动按钮触发 NTP 对时。"""
@@ -574,21 +575,35 @@ class MainWindow(QMainWindow):
     def _on_send_command(self, line: str):
         """命令发送: 记录 TX 日志 → 转发到串口线程"""
         self.log_panel.add_tx_command(line)
+        self._track_expected_response(line)
         self.serial_worker.send_line(line)
 
-        # 跟踪 FORMAT 状态 (本地缓存)
-        upper = line.upper()
-        if "*SET:FORMAT" in upper:
-            if "RIGHT" in upper:
-                self._current_format = "RIGHT"
-            elif "LEFT" in upper:
-                self._current_format = "LEFT"
-            self.fmt_label.setText(f"FORMAT: {self._current_format}")
+    def _track_expected_response(self, line: str):
+        """记录应答顺序，用于解释通用的 OK/ERROR 响应。"""
+        upper = line.strip().upper()
+        if not upper or upper.startswith("*PING") or upper.startswith("INIT"):
+            return
+        self._pending_responses.append(upper)
 
-        # *RST 复位协议状态
-        if upper.startswith("*RST"):
-            self._current_format = "LEFT"
-            self.fmt_label.setText("FORMAT: LEFT")
+    def _send_status_query(self, line: str):
+        """发送不刷 TX 日志的后台状态查询。"""
+        if not self.serial_worker._connected:
+            return
+        upper = line.upper()
+        if upper in self._pending_responses:
+            return
+        self._track_expected_response(line)
+        self.serial_worker.send_line(line)
+
+    def _poll_device_status(self):
+        """周期查询 FORMAT 和 ALARM；MODE 由 MCU 事件实时更新。"""
+        if not self.serial_worker._connected:
+            return
+        self._send_status_query(self.protocol.build_get_format())
+        QTimer.singleShot(
+            120,
+            lambda: self._send_status_query(self.protocol.build_get_alarm()),
+        )
 
     # ═══════════════════════════════════════════════════════════════
     # 接收行处理
@@ -596,11 +611,6 @@ class MainWindow(QMainWindow):
 
     def _on_line_received(self, line: str):
         """收到一行完整的 MCU 响应/事件"""
-        from datetime import datetime
-        now = datetime.now()
-        self.last_rx_label.setText(
-            f"最后收到: {now.strftime('%H:%M:%S')}"
-        )
         event = self.protocol.parse_event(line)
         if event:
             self.log_panel.add_rx_event(line)
@@ -645,23 +655,20 @@ class MainWindow(QMainWindow):
             self.auto_daynight.note_device_mode(state)
 
         elif etype == "ALARM":
-            self.alarm_label.setText("ALARM: RINGING")
-            self._set_widget_state(self.alarm_label, "danger")
+            self._set_alarm_status(True, ringing=True)
             self.dashboard.log_event("ALARM")
 
         elif etype == "ALARM_OFF":
-            # 恢复缓存的闹钟时间
-            self._set_widget_state(self.alarm_label, "normal")
-            if self._alarm_time:
-                self.alarm_label.setText(f"ALARM: {self._alarm_time}")
-            else:
-                self.alarm_label.setText("ALARM: 未设置")
+            # 停止响铃不等于关闭闹钟。
+            self._set_alarm_status(True)
 
         elif etype == "EDIT":
             # 记录到 dashboard CSV
             field = event.get("field", "")
             value = event.get("value", "")
             self.dashboard.log_event("EDIT", field, value)
+            if field.upper() == "ALARM":
+                self._update_alarm_from_value(value)
 
         elif etype == "UNKNOWN":
             pass  # 未知事件类型，仅记录日志
@@ -670,23 +677,51 @@ class MainWindow(QMainWindow):
         """解析非事件响应行，更新状态栏和缓存"""
         upper = line.upper().strip()
 
+        pending = ""
+        if upper == "OK" or upper.startswith("OK ") or upper.startswith("ERROR"):
+            if self._pending_responses:
+                pending = self._pending_responses.popleft()
+
+        if upper.startswith("ERROR"):
+            return
+
+        payload = line.strip()[2:].strip() if upper.startswith("OK") else ""
+
+        if pending.startswith("*GET:FORMAT"):
+            self._update_format_status(payload)
+            return
+
+        if pending.startswith("*GET:ALARM"):
+            self._update_alarm_from_value(payload)
+            return
+
+        if pending.startswith("*SET:FORMAT"):
+            if " RIGHT" in pending:
+                self._update_format_status("RIGHT")
+            elif " LEFT" in pending:
+                self._update_format_status("LEFT")
+            return
+
+        if pending.startswith("*SET:ALARM"):
+            self._set_alarm_status(True)
+            return
+
+        if pending.startswith("*SET:MODE"):
+            target = pending.rsplit(" ", 1)[-1]
+            self._update_status_bar_mode(target)
+            return
+
+        if pending.startswith("*RST"):
+            self._update_format_status("LEFT")
+            self._update_status_bar_mode("FLOWING")
+            return
+
         if upper.startswith("FORMAT:"):
             fmt = line.split(":", 1)[1].strip().upper()
-            if fmt in ("LEFT", "RIGHT"):
-                self._current_format = fmt
-                self.fmt_label.setText(f"FORMAT: {fmt}")
+            self._update_format_status(fmt)
 
         elif upper.startswith("ALARM:"):
-            alarm_val = line.split(":", 1)[1].strip()
-            # MCU 可能返回具体时间或 "--:--:--"/"DISABLED" 表示未设置
-            if alarm_val and alarm_val not in ("--:--:--", "DISABLED", "OFF", ""):
-                self._alarm_time = alarm_val
-                self.alarm_label.setText(f"ALARM: {alarm_val}")
-                self._set_widget_state(self.alarm_label, "normal")
-            else:
-                self._alarm_time = ""
-                self.alarm_label.setText("ALARM: 未设置")
-                self._set_widget_state(self.alarm_label, "normal")
+            self._update_alarm_from_value(line.split(":", 1)[1].strip())
 
         elif upper.startswith("MOTOR:"):
             self.status_bar.showMessage(f"电机: {line.strip()}", 3000)
@@ -706,19 +741,70 @@ class MainWindow(QMainWindow):
     # 状态栏更新
     # ═══════════════════════════════════════════════════════════════
 
+    def _update_format_status(self, value: str):
+        """更新 FORMAT 实际状态。"""
+        fmt = value.strip().upper()
+        if fmt not in ("LEFT", "RIGHT"):
+            return
+        self._current_format = fmt
+        self.fmt_label.setText(f"FORMAT: {fmt}")
+        self._set_widget_state(self.fmt_label, "active")
+
+    def _update_alarm_from_value(self, value: str):
+        """根据 GET/EDIT 返回值更新闹钟使能状态。"""
+        normalized = value.strip().upper()
+        disabled_values = {
+            "", "XX.XX.XX", "XX:XX:XX", "--.--.--", "--:--:--",
+            "DISABLED", "OFF",
+        }
+        if normalized in disabled_values or "X" in normalized:
+            self._alarm_time = ""
+            self._set_alarm_status(False)
+            return
+
+        self._alarm_time = value.strip().replace(".", ":")
+        self._set_alarm_status(True)
+
+    def _set_alarm_status(self, enabled: bool | None, ringing: bool = False):
+        """状态栏只展示 ALARM 是否使能，时间放在提示中。"""
+        self._alarm_enabled = enabled
+        if enabled is None:
+            self.alarm_label.setText("ALARM: --")
+            self.alarm_label.setToolTip("尚未读取闹钟状态")
+            self._set_widget_state(self.alarm_label, "unknown")
+        elif enabled:
+            suffix = " · RINGING" if ringing else ""
+            self.alarm_label.setText(f"ALARM: ENABLED{suffix}")
+            tooltip = "闹钟已使能"
+            if self._alarm_time:
+                tooltip += f"\n设定时间：{self._alarm_time}"
+            self.alarm_label.setToolTip(tooltip)
+            self._set_widget_state(
+                self.alarm_label, "danger" if ringing else "active"
+            )
+        else:
+            self.alarm_label.setText("ALARM: DISABLED")
+            self.alarm_label.setToolTip("闹钟未设置")
+            self._set_widget_state(self.alarm_label, "disabled")
+
     def _update_status_bar_mode(self, state: str):
         """根据 MCU 上报的状态更新 MODE 标签"""
         upper = state.upper()
         mode_map = {
             "FLOWING": "FLOWING",
-            "DATE": "EDIT",
-            "TIME": "EDIT",
-            "ALARM": "EDIT",
+            "DATE": "DATE",
+            "TIME": "TIME",
+            "ALARM": "ALARM",
             "NIGHT": "NIGHT",
             "DAY": "DAY",
         }
         display_mode = mode_map.get(upper, upper)
+        if not display_mode:
+            return
+        self._current_mode = display_mode
         self.mode_label.setText(f"MODE: {display_mode}")
+        state_name = "night" if display_mode == "NIGHT" else "active"
+        self._set_widget_state(self.mode_label, state_name)
 
     def _on_connection_changed(self, connected: bool):
         """串口连接状态变更"""
@@ -729,13 +815,22 @@ class MainWindow(QMainWindow):
             self.btn_connect.setText("断开")
             self.btn_connect.setProperty("danger", True)
             self.weather_helper.send_status_led_to_mcu()
+            self._pending_responses.clear()
+            QTimer.singleShot(250, self._poll_device_status)
             QTimer.singleShot(600, self.auto_daynight.sync_now)
         else:
             self.conn_label.setText("●  OFFLINE")
             self._set_widget_state(self.conn_label, "offline")
             self.btn_connect.setText("连接")
             self.btn_connect.setProperty("danger", False)
-            self.ping_label.setText("PING: --ms")
+            self._pending_responses.clear()
+            self._current_format = ""
+            self._current_mode = ""
+            self.fmt_label.setText("FORMAT: --")
+            self.mode_label.setText("MODE: --")
+            self._set_widget_state(self.fmt_label, "unknown")
+            self._set_widget_state(self.mode_label, "unknown")
+            self._set_alarm_status(None)
             # 如果有端口错误，显示在状态栏和日志
             err = self.serial_worker.last_port_error
             if err:
@@ -747,10 +842,6 @@ class MainWindow(QMainWindow):
 
         # 启用/禁用控制面板控件
         self.control_panel.set_controls_enabled(connected)
-
-    def _on_latency_updated(self, latency_ms: int):
-        """PING/PONG 往返延迟更新"""
-        self.ping_label.setText(f"PING: {latency_ms}ms")
 
     def _on_port_error(self, error_msg: str):
         """端口错误信号处理"""
@@ -772,6 +863,9 @@ class MainWindow(QMainWindow):
         # 停止天气自动刷新
         self._weather_timer.stop()
         self.weather_helper.stop_auto_refresh()
+
+        # 停止状态轮询
+        self._status_poll_timer.stop()
 
         # 停止自动昼夜模式定时器
         self.auto_daynight.stop()

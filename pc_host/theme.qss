@@ -616,6 +616,24 @@ QStatusBar QLabel[state="offline"] {
     color: #687791;
 }
 
+QStatusBar QLabel[state="unknown"],
+QStatusBar QLabel[state="disabled"] {
+    color: #687791;
+    border-color: #26324A;
+}
+
+QStatusBar QLabel[state="active"] {
+    background-color: #10251F;
+    color: #5DE4C7;
+    border-color: #214D41;
+}
+
+QStatusBar QLabel[state="night"] {
+    background-color: #162238;
+    color: #9CB7E8;
+    border-color: #344A70;
+}
+
 QStatusBar QLabel[state="danger"] {
     background-color: #3A1D28;
     color: #FF8E9C;

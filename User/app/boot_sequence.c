@@ -101,10 +101,11 @@ static void FinishBootSequence(void)
     g.disp.shifting = true;
     g.disp.blinking = false;
 
-    /* ── 夜间模式 / LED 接管 ── */
+    /* ── 夜间模式 / LED 接管 / 天气 ── */
     g.disp.night_mode = false;
     g.disp.led_takeover = false;
     g.disp.led_pattern = 0x00;
+    g.disp.weather_code = 0x00;
 
     /* ── 消息 / 保存闪烁 / 长按 ── */
     g.disp.msg_active = false;

@@ -37,6 +37,7 @@ app_state_t g = {
         .night_mode = false,   // 非夜间模式 (ARMCC5 兼容)
         .led_takeover = false, // 非 LED 接管模式 (ARMCC5 兼容)
         .led_pattern = 0x00,   // LED 接管输出模式 (ARMCC5 兼容)
+        .weather_code = 0x00,  // 天气 LED5-7 初始关闭 (ARMCC5 兼容)
         .alarm_ringing = false,// 未在响铃 (ARMCC5 兼容)
         .alarm_beep_on = false,// 蜂鸣器关闭 (ARMCC5 兼容)
         .msg_active = false,   // 无临时消息 (ARMCC5 兼容)

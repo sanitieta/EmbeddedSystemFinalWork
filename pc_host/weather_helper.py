@@ -137,7 +137,7 @@ class WeatherHelper(QObject):
         """保留兼容入口；当前 helper 不持有定时器。"""
 
     def send_weather_to_mcu(self) -> bool:
-        """将最近天气以 7SEG 友好的 ASCII 消息和 LED 编码下发。"""
+        """将最近天气以 7SEG 友好的 ASCII 消息和 LED5-LED7 编码下发。"""
         snapshot = self._snapshot
         if snapshot is None:
             return False
@@ -146,16 +146,16 @@ class WeatherHelper(QObject):
             self.protocol.build_set_msg(snapshot.mcu_message)
         )
         self.command_ready.emit(
-            self.protocol.build_set_led(self._compute_weather_led())
+            self.protocol.build_set_weather(self._compute_weather_led())
         )
         return True
 
     def send_status_led_to_mcu(self) -> bool:
-        """串口重连后恢复最近天气的 LED5-LED7 编码。"""
+        """串口重连后恢复最近天气的 LED5-LED7 编码 (不破坏 LED0-LED4)。"""
         if self._snapshot is None:
             return False
         self.command_ready.emit(
-            self.protocol.build_set_led(self._compute_weather_led())
+            self.protocol.build_set_weather(self._compute_weather_led())
         )
         return True
 

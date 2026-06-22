@@ -105,6 +105,7 @@ static void ResetProtocolState(void)
     g.disp.night_mode = false;
     g.disp.led_takeover = false;
     g.disp.led_pattern = 0x00;
+    g.disp.weather_code = 0x00;
     g.disp.ntp_synced = false;
     g.disp.msg_active = false;
     g.disp.msg_scroll = false;
@@ -1018,6 +1019,23 @@ void ProcessUartCommand(void)
         }
     }
 
+    // 处理 "*SET:WEATHER" 命令 (天气 LED5-LED7 指示, 不进入 LED 接管)
+    else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*SET:WEATHER"))
+    {
+        uint8_t weather_value;
+
+        if (g.uart.num_tokens == current_param_idx + 1 && ParseHexByte(&g.uart.tokens[current_param_idx], &weather_value))
+        {
+            g.disp.weather_code = (uint8_t)(weather_value & 0xE0); /* 仅保留 LED5-7 */
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
+            Display_UpdateStatusLeds();
+        }
+        else
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR PARAM\r\n");
+        }
+    }
+
     // 处理 "*SET:MODE" 命令 (夜间模式)
     else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*SET:MODE"))
     {
@@ -1442,6 +1460,7 @@ void ProcessUartCommand(void)
             "*SET:FORMAT LEFT/RIGHT                    : Set display direction.\r\n"
             "*SET:MSG <text>                           : Show temporary message (max 32 bytes).\r\n"
             "*SET:LED <hex2>                           : LED takeover; 00 restores default.\r\n"
+            "*SET:WEATHER <hex2>                        : Weather LED5-7 indicator (no takeover).\r\n"
             "*SET:MODE NIGHT/DAY                       : Night/day mode.\r\n"
             "*SET:KEY FUNC/SHIFT/ADD/SAVE/DISP/SPEED/FORMAT/EXT/USER1/USER2 : Virtual key injection.\r\n"
             "*NTP SYNC                                 : Mark NTP sync complete; LED4 on.\r\n"

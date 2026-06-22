@@ -361,6 +361,9 @@ void Display_UpdateStatusLeds(void)
         }
     }
 
+    /* LED5-LED7: 天气指示 (PC 端 *SET:WEATHER 下发, 不进入接管模式) */
+    pattern |= g.disp.weather_code;
+
     g.disp.current_led = pattern;
     Display_SetLedOutput(pattern);
 

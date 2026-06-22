@@ -231,5 +231,10 @@ class Protocol:
         return f"*SET:KEY {name}"
 
     @staticmethod
+    def build_set_weather(byte: int) -> str:
+        """天气 LED5-LED7 指示 (不进入 LED 接管, 仅影响高 3 位)"""
+        return f"*SET:WEATHER {byte & 0xE0:02X}"
+
+    @staticmethod
     def build_ntp_sync() -> str:
         return "*NTP SYNC"

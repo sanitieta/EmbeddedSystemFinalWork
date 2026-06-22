@@ -10,6 +10,7 @@
 #include "display.h"
 #include "command.h"
 #include "melody.h"
+#include "pwm_buzzer.h"
 #include "uart_port.h"
 
 void App_Init(void)

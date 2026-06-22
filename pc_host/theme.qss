@@ -305,9 +305,41 @@ QPushButton[active="true"] {
 
 QScrollArea#controlScroll,
 QScrollArea#controlScroll QWidget#qt_scrollarea_viewport,
-QWidget#controlContent {
+QWidget#controlContent,
+QScrollArea#controlTabScroll,
+QScrollArea#controlTabScroll QWidget#qt_scrollarea_viewport,
+QWidget#controlTabContent {
     background: transparent;
     border: none;
+}
+
+QTabWidget#controlTabs::pane {
+    background-color: #0A0F18;
+    border: 1px solid #25314A;
+    border-radius: 9px;
+    top: -1px;
+}
+
+QTabWidget#controlTabs QTabBar::tab {
+    min-width: 128px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+QLabel#controlTabHint {
+    color: #8292AA;
+    background-color: #101827;
+    border-left: 3px solid #405273;
+    border-radius: 4px;
+    padding: 7px 10px;
+    font-size: 12px;
+}
+
+QLabel#controlCardHint {
+    color: #71819A;
+    font-size: 12px;
+    padding: 0 2px 4px 2px;
 }
 
 QGroupBox {

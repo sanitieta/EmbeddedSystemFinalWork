@@ -112,6 +112,16 @@ class WeatherHelperTests(unittest.TestCase):
             ["*SET:MSG -3C SNOW", "*SET:LED 20"],
         )
 
+    def test_user2_cloudy_message_fits_static_eight_digit_display(self):
+        snapshot = WeatherSnapshot(26, "CLOUDY", "多云", "test")
+
+        self.assertEqual(snapshot.mcu_message, "26C CLD")
+        self.assertLessEqual(len(snapshot.mcu_message), 8)
+        self.assertEqual(
+            WeatherSnapshot(-99, "RAIN", "雨", "test").mcu_message,
+            "-99CRAIN",
+        )
+
     def test_async_fetch_emits_led_and_restores_busy_state(self):
         entered = threading.Event()
         release = threading.Event()

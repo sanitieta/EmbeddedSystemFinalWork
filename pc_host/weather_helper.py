@@ -35,6 +35,16 @@ REQUEST_TIMEOUT = (4, 6)  # connect, read
 WEATHER_CACHE_MAX_AGE_S = 2 * 60 * 60
 USER_AGENT = "S800-Device-Console/1.0"
 
+MCU_CONDITION_CODES = {
+    "SUNNY": "SUN",
+    "CLOUDY": "CLD",
+    "RAIN": "RAIN",
+    "SNOW": "SNOW",
+    "FOG": "FOG",
+    "STORM": "STM",
+    "WEATHER": "WX",
+}
+
 
 @dataclass(frozen=True)
 class WeatherSnapshot:
@@ -45,7 +55,14 @@ class WeatherSnapshot:
 
     @property
     def mcu_message(self) -> str:
-        return f"{self.temperature_c:+d}C {self.condition}"
+        # USER2 是 8 位静态短显；完整单词会进入滚动模式，末尾字母容易
+        # 被误认为残留字符。温度限制到两位，保证消息始终不超过 8 字符。
+        temperature = max(-99, min(99, self.temperature_c))
+        condition = MCU_CONDITION_CODES.get(self.condition, "WX")
+        message = f"{temperature:d}C {condition}"
+        if len(message) > 8:
+            message = message.replace(" ", "", 1)
+        return message[:8]
 
     @property
     def summary(self) -> str:

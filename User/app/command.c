@@ -1002,7 +1002,55 @@ void ProcessUartCommand(void)
     {
         if (g.uart.num_tokens == current_param_idx + 1)
         {
-            if (compareTokens(&g.uart.tokens[current_param_idx], "USER1", 5))
+            if (compareTokens(&g.uart.tokens[current_param_idx], "FUNC", 4))
+            {
+                g.in.suppress_key_events = true;
+                g.in.short_evt[0] = true;              // K1
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
+            }
+            else if (compareTokens(&g.uart.tokens[current_param_idx], "SHIFT", 5))
+            {
+                g.in.suppress_key_events = true;
+                g.in.short_evt[1] = true;              // K2
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
+            }
+            else if (compareTokens(&g.uart.tokens[current_param_idx], "ADD", 3))
+            {
+                g.in.suppress_key_events = true;
+                g.in.short_evt[2] = true;              // K3
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
+            }
+            else if (compareTokens(&g.uart.tokens[current_param_idx], "SAVE", 4))
+            {
+                g.in.suppress_key_events = true;
+                g.in.short_evt[3] = true;              // K4
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
+            }
+            else if (compareTokens(&g.uart.tokens[current_param_idx], "DISP", 4))
+            {
+                g.in.suppress_key_events = true;
+                g.in.short_evt[4] = true;              // K5
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
+            }
+            else if (compareTokens(&g.uart.tokens[current_param_idx], "SPEED", 5))
+            {
+                g.in.suppress_key_events = true;
+                g.in.short_evt[5] = true;              // K6
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
+            }
+            else if (compareTokens(&g.uart.tokens[current_param_idx], "FORMAT", 6))
+            {
+                g.in.suppress_key_events = true;
+                g.in.short_evt[6] = true;              // K7
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
+            }
+            else if (compareTokens(&g.uart.tokens[current_param_idx], "EXT", 3))
+            {
+                g.in.suppress_key_events = true;
+                g.in.short_evt[7] = true;              // K8
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
+            }
+            else if (compareTokens(&g.uart.tokens[current_param_idx], "USER1", 5))
             {
                 g.in.suppress_key_events = true;
                 g.in.user_short_evt[0] = true;
@@ -1012,12 +1060,6 @@ void ProcessUartCommand(void)
             {
                 g.in.suppress_key_events = true;
                 g.in.user_short_evt[1] = true;
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
-            }
-            else if (compareTokens(&g.uart.tokens[current_param_idx], "EXT", 3))
-            {
-                g.in.suppress_key_events = true;
-                g.in.short_evt[7] = true;          // K8
                 UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
             }
             else
@@ -1300,7 +1342,7 @@ void ProcessUartCommand(void)
             "*SET:MSG <text>                           : Show temporary message (max 32 bytes).\r\n"
             "*SET:LED <hex2>                           : LED takeover; 00 restores default.\r\n"
             "*SET:MODE NIGHT/DAY                       : Night/day mode.\r\n"
-            "*SET:KEY USER1/USER2/EXT                  : Virtual key injection.\r\n"
+            "*SET:KEY FUNC/SHIFT/ADD/SAVE/DISP/SPEED/FORMAT/EXT/USER1/USER2 : Virtual key injection.\r\n"
             "*GET:DATE [YEAR] [MONTH] [DATE]           : Get date.\r\n"
             "*GET:TIME [HOUR] [MINUTE] [SECOND]        : Get time.\r\n"
             "*GET:ALARM                                : Get alarm time.\r\n"

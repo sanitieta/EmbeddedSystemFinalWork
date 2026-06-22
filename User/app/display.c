@@ -460,6 +460,7 @@ void Update7SegmentDisplay(void)
     g.disp.i2c_result = I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT2, 0x00); // 确保所有位选都关闭
 
     local_cnt = g.disp.cnt; // 获取当前轮询的数码管索引
+    display_cnt = g.disp.reversed ? (uint8_t)(7 - local_cnt) : local_cnt;
 
     if (g.disp.msg_active)
     {
@@ -484,8 +485,6 @@ void Update7SegmentDisplay(void)
     }
     else if (g.disp.mode == MODE_FLOWING) // 流动显示模式
     {
-        display_cnt = g.disp.reversed ? (uint8_t)(7 - local_cnt) : local_cnt;
-
         if (g.disp.main_disp == MAIN_DISPLAY_FLOW)
         {
             segment_data = g.disp.master_buf[(g.disp.shift + local_cnt) % 18];
@@ -546,22 +545,22 @@ void Update7SegmentDisplay(void)
     }
     else if (g.disp.mode == MODE_DATE_SET) // 日期设置模式
     {
-        // 根据local_cnt显示年、月、日
-        if (local_cnt == 0)
+        // 根据display_cnt显示年、月、日 (支持 FORMAT RIGHT)
+        if (display_cnt == 0)
             segment_data = g.disp.seg7[(g.clock.temp_year / 1000) % 10];
-        else if (local_cnt == 1)
+        else if (display_cnt == 1)
             segment_data = g.disp.seg7[(g.clock.temp_year / 100) % 10];
-        else if (local_cnt == 2)
+        else if (display_cnt == 2)
             segment_data = g.disp.seg7[(g.clock.temp_year / 10) % 10];
-        else if (local_cnt == 3)
+        else if (display_cnt == 3)
             segment_data = g.disp.seg7[(g.clock.temp_year % 10)] | 0x80; // 年份末位带小数点
-        else if (local_cnt == 4)
+        else if (display_cnt == 4)
             segment_data = g.disp.seg7[g.clock.temp_month / 10];
-        else if (local_cnt == 5)
+        else if (display_cnt == 5)
             segment_data = g.disp.seg7[g.clock.temp_month % 10] | 0x80; // 月份末位带小数点
-        else if (local_cnt == 6)
+        else if (display_cnt == 6)
             segment_data = g.disp.seg7[g.clock.temp_day / 10];
-        else if (local_cnt == 7)
+        else if (display_cnt == 7)
             segment_data = g.disp.seg7[g.clock.temp_day % 10];
         else
             segment_data = 0x00; // 未使用数码管
@@ -570,9 +569,9 @@ void Update7SegmentDisplay(void)
         if (g.disp.blinking && (g.timer.tick % (BLINK_ON_TIME_MS + BLINK_OFF_TIME_MS)) >= BLINK_ON_TIME_MS)
         {
             // 根据当前设置字段，判断是否需要闪烁关闭
-            if ((g.disp.field == FIELD_YEAR && local_cnt <= 3) ||
-                (g.disp.field == FIELD_MONTH && local_cnt >= 4 && local_cnt <= 5) ||
-                (g.disp.field == FIELD_DAY && local_cnt >= 6 && local_cnt <= 7))
+            if ((g.disp.field == FIELD_YEAR && display_cnt <= 3) ||
+                (g.disp.field == FIELD_MONTH && display_cnt >= 4 && display_cnt <= 5) ||
+                (g.disp.field == FIELD_DAY && display_cnt >= 6 && display_cnt <= 7))
             {
                 digit_should_blink_off = true;
             }
@@ -582,20 +581,20 @@ void Update7SegmentDisplay(void)
     }
     else if (g.disp.mode == MODE_TIME_SET) // 时间设置模式
     {
-        // 根据local_cnt显示时、分、秒
-        if (local_cnt == 0 || local_cnt == 7) // 两端空白
+        // 根据display_cnt显示时、分、秒 (支持 FORMAT RIGHT)
+        if (display_cnt == 0 || display_cnt == 7) // 两端空白
             segment_data = 0x00;
-        else if (local_cnt == 1)
+        else if (display_cnt == 1)
             segment_data = g.disp.seg7[g.clock.temp_hh / 10];
-        else if (local_cnt == 2)
+        else if (display_cnt == 2)
             segment_data = g.disp.seg7[g.clock.temp_hh % 10] | 0x80; // 小时末位带小数点
-        else if (local_cnt == 3)
+        else if (display_cnt == 3)
             segment_data = g.disp.seg7[g.clock.temp_mm / 10];
-        else if (local_cnt == 4)
+        else if (display_cnt == 4)
             segment_data = g.disp.seg7[g.clock.temp_mm % 10] | 0x80; // 分钟末位带小数点
-        else if (local_cnt == 5)
+        else if (display_cnt == 5)
             segment_data = g.disp.seg7[g.clock.temp_ss / 10];
-        else if (local_cnt == 6)
+        else if (display_cnt == 6)
             segment_data = g.disp.seg7[g.clock.temp_ss % 10];
         else
             segment_data = 0x00; // 未使用数码管
@@ -604,9 +603,9 @@ void Update7SegmentDisplay(void)
         if (g.disp.blinking && (g.timer.tick % (BLINK_ON_TIME_MS + BLINK_OFF_TIME_MS)) >= BLINK_ON_TIME_MS)
         {
             // 根据当前设置字段，判断是否需要闪烁关闭
-            if ((g.disp.field == FIELD_HOUR && local_cnt >= 1 && local_cnt <= 2) ||
-                (g.disp.field == FIELD_MINUTE && local_cnt >= 3 && local_cnt <= 4) ||
-                (g.disp.field == FIELD_SECOND && local_cnt >= 5 && local_cnt <= 6))
+            if ((g.disp.field == FIELD_HOUR && display_cnt >= 1 && display_cnt <= 2) ||
+                (g.disp.field == FIELD_MINUTE && display_cnt >= 3 && display_cnt <= 4) ||
+                (g.disp.field == FIELD_SECOND && display_cnt >= 5 && display_cnt <= 6))
             {
                 digit_should_blink_off = true;
             }
@@ -616,20 +615,20 @@ void Update7SegmentDisplay(void)
     }
     else if (g.disp.mode == MODE_ALARM_SET) // 闹钟设置模式
     {
-        // 根据local_cnt显示闹钟时、分、秒
-        if (local_cnt == 0 || local_cnt == 7) // 两端空白
+        // 根据display_cnt显示闹钟时、分、秒 (支持 FORMAT RIGHT)
+        if (display_cnt == 0 || display_cnt == 7) // 两端空白
             segment_data = 0x00;
-        else if (local_cnt == 1)
+        else if (display_cnt == 1)
             segment_data = g.disp.seg7[g.clock.temp_alm_hh / 10];
-        else if (local_cnt == 2)
+        else if (display_cnt == 2)
             segment_data = g.disp.seg7[g.clock.temp_alm_hh % 10] | 0x80; // 闹钟小时末位带小数点
-        else if (local_cnt == 3)
+        else if (display_cnt == 3)
             segment_data = g.disp.seg7[g.clock.temp_alm_mm / 10];
-        else if (local_cnt == 4)
+        else if (display_cnt == 4)
             segment_data = g.disp.seg7[g.clock.temp_alm_mm % 10] | 0x80; // 闹钟分钟末位带小数点
-        else if (local_cnt == 5)
+        else if (display_cnt == 5)
             segment_data = g.disp.seg7[g.clock.temp_alm_ss / 10];
-        else if (local_cnt == 6)
+        else if (display_cnt == 6)
             segment_data = g.disp.seg7[g.clock.temp_alm_ss % 10];
         else
             segment_data = 0x00; // 未使用数码管
@@ -638,9 +637,9 @@ void Update7SegmentDisplay(void)
         if (g.disp.blinking && (g.timer.tick % (BLINK_ON_TIME_MS + BLINK_OFF_TIME_MS)) >= BLINK_ON_TIME_MS)
         {
             // 根据当前设置字段，判断是否需要闪烁关闭
-            if ((g.disp.field == FIELD_ALARM_HOUR && local_cnt >= 1 && local_cnt <= 2) ||
-                (g.disp.field == FIELD_ALARM_MINUTE && local_cnt >= 3 && local_cnt <= 4) ||
-                (g.disp.field == FIELD_ALARM_SECOND && local_cnt >= 5 && local_cnt <= 6))
+            if ((g.disp.field == FIELD_ALARM_HOUR && display_cnt >= 1 && display_cnt <= 2) ||
+                (g.disp.field == FIELD_ALARM_MINUTE && display_cnt >= 3 && display_cnt <= 4) ||
+                (g.disp.field == FIELD_ALARM_SECOND && display_cnt >= 5 && display_cnt <= 6))
             {
                 digit_should_blink_off = true;
             }
@@ -650,22 +649,22 @@ void Update7SegmentDisplay(void)
     }
     else if (g.disp.mode == MODE_ALARM_DISPLAY) // 闹钟显示模式
     {
-        // 显示“ALARM”字样和闹钟时间
-        if (local_cnt == 0) // 'A'
+        // 显示”AL”字样和闹钟时间 (支持 FORMAT RIGHT)
+        if (display_cnt == 0) // 'A'
             segment_data = g.disp.seg7[10];
-        else if (local_cnt == 1) // 'L'
+        else if (display_cnt == 1) // 'L'
             segment_data = 0x38;
-        else if (local_cnt == 2) // 小时高位 或 'x' (如果未设置)
+        else if (display_cnt == 2) // 小时高位 或 'x' (如果未设置)
             segment_data = (g.clock.alm_hh == 25) ? g.disp.seg7[17] : g.disp.seg7[g.clock.alm_hh / 10];
-        else if (local_cnt == 3) // 小时低位 或 'x' (如果未设置), 带小数点
+        else if (display_cnt == 3) // 小时低位 或 'x' (如果未设置), 带小数点
             segment_data = (g.clock.alm_hh == 25) ? g.disp.seg7[17] : (g.disp.seg7[g.clock.alm_hh % 10] | 0x80);
-        else if (local_cnt == 4) // 分钟高位 或 'x' (如果未设置)
+        else if (display_cnt == 4) // 分钟高位 或 'x' (如果未设置)
             segment_data = (g.clock.alm_hh == 25) ? g.disp.seg7[17] : g.disp.seg7[g.clock.alm_mm / 10];
-        else if (local_cnt == 5) // 分钟低位 或 'x' (如果未设置), 带小数点
+        else if (display_cnt == 5) // 分钟低位 或 'x' (如果未设置), 带小数点
             segment_data = (g.clock.alm_hh == 25) ? g.disp.seg7[17] : (g.disp.seg7[g.clock.alm_mm % 10] | 0x80);
-        else if (local_cnt == 6) // 秒高位 或 'x' (如果未设置)
+        else if (display_cnt == 6) // 秒高位 或 'x' (如果未设置)
             segment_data = (g.clock.alm_hh == 25) ? g.disp.seg7[17] : g.disp.seg7[g.clock.alm_ss / 10];
-        else if (local_cnt == 7) // 秒低位 或 'x' (如果未设置)
+        else if (display_cnt == 7) // 秒低位 或 'x' (如果未设置)
             segment_data = (g.clock.alm_hh == 25) ? g.disp.seg7[17] : g.disp.seg7[g.clock.alm_ss % 10];
         else
             segment_data = 0x00; // 未使用数码管

@@ -49,7 +49,10 @@ class Protocol:
         parts = args.split()
         if len(parts) >= 2:
             chars = list(parts[0])  # 8-character string
-            dp = int(parts[1], 16)  # hex bitmap
+            try:
+                dp = int(parts[1], 16) & 0xFF  # HEX bitmap, bit N -> digit N
+            except ValueError:
+                dp = 0
             return {"type": "DISP", "chars": chars, "dp": dp}
         return {"type": "DISP", "chars": [], "dp": 0}
 

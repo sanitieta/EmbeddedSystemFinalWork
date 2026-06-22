@@ -117,9 +117,9 @@ _COLOR_GLOW: QColor = QColor("#FF6040")  # lighter accent for tube glow effect
 _COLOR_GLOW.setAlpha(60)
 
 # Decimal-point centre in unit-square coordinates
-_DP_CENTER: QPointF = QPointF(0.92, 0.88)
-_DP_RX: float = 0.06
-_DP_RY: float = 0.08
+_DP_CENTER: QPointF = QPointF(1.05, 0.92)
+_DP_RX: float = 0.055
+_DP_RY: float = 0.042
 
 
 # ---------------------------------------------------------------------------
@@ -265,14 +265,23 @@ class SevenSegWidget(QWidget):
 
         # Decimal point with glow when active
         if self._dp:
+            # Cut a dark isolation ring around the dot.  Without this gap the
+            # dot visually merges into segments C/D and appears to be missing.
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QBrush(_COLOR_BG))
+            painter.drawEllipse(
+                _DP_CENTER,
+                _DP_RX + 0.045,
+                _DP_RY + 0.035,
+            )
+
             # Glow ellipse behind dp
             glow_dp = QColor("#FF6040")
             glow_dp.setAlpha(60)
-            painter.setPen(Qt.NoPen)
             painter.setBrush(QBrush(glow_dp))
             painter.drawEllipse(
                 QPointF(_DP_CENTER.x(), _DP_CENTER.y()),
-                _DP_RX + 0.03, _DP_RY + 0.03,
+                _DP_RX + 0.025, _DP_RY + 0.020,
             )
         dp_color: QColor = _COLOR_ON if self._dp else _COLOR_OFF
         painter.setBrush(QBrush(dp_color))

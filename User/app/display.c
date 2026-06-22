@@ -313,9 +313,6 @@ void Display_UpdateStatusLeds(void)
     if (g.disp.led_takeover)
     {
         pattern = g.disp.led_pattern;
-        /* LED4 保留给 NTP 状态，天气等 PC 接管模式也不能覆盖。 */
-        if (!g.disp.night_mode && g.disp.ntp_synced)
-            pattern |= 0x10;
         g.disp.current_led = pattern;
         Display_SetLedOutput(pattern);
         /* LED takeover 变化检测 */
@@ -433,8 +430,6 @@ void Display_SendLedEvent(void)
     if (g.disp.led_takeover)
     {
         pattern = g.disp.led_pattern;
-        if (!g.disp.night_mode && g.disp.ntp_synced)
-            pattern |= 0x10;
     }
     else
         pattern = g.disp.current_led;

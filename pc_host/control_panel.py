@@ -16,10 +16,10 @@
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,
-    QPushButton, QLineEdit, QComboBox, QLabel, QCheckBox,
-    QDateTimeEdit, QTimeEdit, QSpinBox, QFrame,
+    QPushButton, QLineEdit, QComboBox, QLabel, QSpinBox,
+    QFrame, QScrollArea,
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QDate, QTime
+from PyQt5.QtCore import Qt, pyqtSignal
 from protocol import Protocol
 
 
@@ -30,6 +30,7 @@ class ControlPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName("ControlPanel")
         self.setWindowTitle("控制面板")
         self.protocol = Protocol()
 
@@ -40,10 +41,39 @@ class ControlPanel(QWidget):
     # ── UI 构建 ──
 
     def _build_ui(self):
-        layout = QVBoxLayout(self)
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(18, 16, 18, 14)
+        outer_layout.setSpacing(10)
+
+        header = QHBoxLayout()
+        header_text = QVBoxLayout()
+        header_text.setSpacing(1)
+        title = QLabel("控制中心")
+        title.setObjectName("panelTitle")
+        subtitle = QLabel("COMMAND & AUTOMATION")
+        subtitle.setObjectName("panelEyebrow")
+        header_text.addWidget(subtitle)
+        header_text.addWidget(title)
+        header.addLayout(header_text)
+        header.addStretch()
+        command_badge = QLabel("22+ COMMANDS")
+        command_badge.setObjectName("sectionBadge")
+        header.addWidget(command_badge, alignment=Qt.AlignVCenter)
+        outer_layout.addLayout(header)
+
+        scroll = QScrollArea()
+        scroll.setObjectName("controlScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        content = QWidget()
+        content.setObjectName("controlContent")
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 6, 0)
+        layout.setSpacing(10)
 
         # === 日期设置组 ===
-        date_group = QGroupBox("日期设置 *SET:DATE")
+        date_group = QGroupBox("日期  /  SET:DATE")
         date_layout = QGridLayout()
         date_layout.addWidget(QLabel("年份:"), 0, 0)
         self.date_year = QSpinBox()
@@ -83,7 +113,7 @@ class ControlPanel(QWidget):
         layout.addWidget(self._make_separator())
 
         # === 时间设置组 ===
-        time_group = QGroupBox("时间设置 *SET:TIME")
+        time_group = QGroupBox("时间  /  SET:TIME")
         time_layout = QGridLayout()
         time_layout.addWidget(QLabel("时:"), 0, 0)
         self.time_hour = QSpinBox()
@@ -122,7 +152,7 @@ class ControlPanel(QWidget):
         layout.addWidget(self._make_separator())
 
         # === 闹钟设置组 ===
-        alarm_group = QGroupBox("闹钟设置 *SET:ALARM")
+        alarm_group = QGroupBox("闹钟  /  SET:ALARM")
         alarm_layout = QGridLayout()
         alarm_layout.addWidget(QLabel("时:"), 0, 0)
         self.alarm_hour = QSpinBox()
@@ -148,8 +178,8 @@ class ControlPanel(QWidget):
         layout.addWidget(self._make_separator())
 
         # === 显示/格式组 ===
-        disp_group = QGroupBox("显示 & 格式")
-        disp_layout = QHBoxLayout()
+        disp_group = QGroupBox("显示策略  /  DISPLAY · FORMAT · MODE")
+        disp_layout = QGridLayout()
         self.btn_disp_on = QPushButton("DISPLAY ON")
         self.btn_disp_off = QPushButton("DISPLAY OFF")
         self.btn_format_left = QPushButton("FORMAT LEFT")
@@ -158,24 +188,25 @@ class ControlPanel(QWidget):
         self.btn_mode_night = QPushButton("MODE NIGHT")
         self.btn_get_display = QPushButton("获取显示")
         self.btn_get_format = QPushButton("获取格式")
-        disp_layout.addWidget(self.btn_disp_on)
-        disp_layout.addWidget(self.btn_disp_off)
-        disp_layout.addWidget(self.btn_format_left)
-        disp_layout.addWidget(self.btn_format_right)
-        disp_layout.addWidget(self.btn_mode_day)
-        disp_layout.addWidget(self.btn_mode_night)
-        disp_layout.addWidget(self.btn_get_display)
-        disp_layout.addWidget(self.btn_get_format)
+        display_buttons = [
+            self.btn_disp_on, self.btn_disp_off,
+            self.btn_format_left, self.btn_format_right,
+            self.btn_mode_day, self.btn_mode_night,
+            self.btn_get_display, self.btn_get_format,
+        ]
+        for index, button in enumerate(display_buttons):
+            disp_layout.addWidget(button, index // 4, index % 4)
         disp_group.setLayout(disp_layout)
         layout.addWidget(disp_group)
         layout.addWidget(self._make_separator())
 
         # === 消息 & LED 组 ===
-        msg_led_group = QGroupBox("消息 & LED")
+        msg_led_group = QGroupBox("消息与 LED  /  OUTPUT")
         ml_layout = QHBoxLayout()
         ml_layout.addWidget(QLabel("消息 (≤32):"))
         self.msg_input = QLineEdit()
         self.msg_input.setMaxLength(32)
+        self.msg_input.setPlaceholderText("输入最多 32 个字符…")
         ml_layout.addWidget(self.msg_input)
         self.btn_msg_send = QPushButton("发送消息")
         ml_layout.addWidget(self.btn_msg_send)
@@ -184,6 +215,7 @@ class ControlPanel(QWidget):
         self.led_input = QLineEdit()
         self.led_input.setMaxLength(2)
         self.led_input.setFixedWidth(40)
+        self.led_input.setPlaceholderText("FF")
         ml_layout.addWidget(self.led_input)
         self.btn_led_set = QPushButton("设置LED")
         self.btn_led_default = QPushButton("恢复默认")
@@ -194,7 +226,7 @@ class ControlPanel(QWidget):
         layout.addWidget(self._make_separator())
 
         # === 电机控制组 ===
-        motor_group = QGroupBox("步进电机控制")
+        motor_group = QGroupBox("步进电机  /  MOTION")
         motor_layout = QHBoxLayout()
         self.btn_motor_start = QPushButton("START")
         self.btn_motor_stop = QPushButton("STOP")
@@ -211,7 +243,7 @@ class ControlPanel(QWidget):
         layout.addWidget(self._make_separator())
 
         # === 系统命令 & 演示组 ===
-        sys_group = QGroupBox("系统 & 演示")
+        sys_group = QGroupBox("系统诊断  /  SYSTEM")
         sys_layout = QHBoxLayout()
         self.btn_rst = QPushButton("*RST (复位协议)")
         self.btn_init = QPushButton("INIT (系统复位)")
@@ -222,6 +254,7 @@ class ControlPanel(QWidget):
         sys_layout.addWidget(self.btn_help)
         sys_layout.addWidget(self.btn_ping)
 
+        sys_group.setLayout(sys_layout)
         layout.addWidget(sys_group)
         layout.addWidget(self._make_separator())
 
@@ -233,6 +266,8 @@ class ControlPanel(QWidget):
         layout.addLayout(demo_layout)
 
         layout.addStretch()
+        scroll.setWidget(content)
+        outer_layout.addWidget(scroll)
 
     # ── 信号连接 ──
 
@@ -292,7 +327,7 @@ class ControlPanel(QWidget):
             self.protocol.build_init()))
         self.btn_help.clicked.connect(lambda: self.send_command.emit(
             self.protocol.build_help()))
-        self.btn_ping.clicked.connect(lambda: self.send_command.emit("PING"))
+        self.btn_ping.clicked.connect(lambda: self.send_command.emit("*PING"))
 
         # 演示
         self.btn_demo_abbrev.clicked.connect(self._on_demo_abbrev)
@@ -409,54 +444,27 @@ class ControlPanel(QWidget):
         return line
 
     def _apply_styles(self):
-        """应用调色板一致的样式
+        """通过动态属性声明按钮语义，具体视觉统一交给 theme.qss。"""
+        primary_buttons = (
+            self.btn_date_set, self.btn_time_set, self.btn_alarm_set,
+            self.btn_msg_send, self.btn_led_set, self.btn_motor_start,
+        )
+        for button in primary_buttons:
+            button.setProperty("primary", True)
 
-        - QGroupBox 标题使用调色板强调色 (#3DAEE9, 对应 Fusion dark highlight)
-        - 分割线采用低透明度, 保持视觉分隔但不过度突出
-        - 演示按钮使用斜体文字, 与正常命令按钮区分开
-        """
-        # Fusion dark palette accent color
-        ACCENT = "#3DAEE9"
+        secondary_buttons = (
+            self.btn_date_get, self.btn_time_get, self.btn_alarm_get,
+            self.btn_get_display, self.btn_get_format, self.btn_motor_get,
+        )
+        for button in secondary_buttons:
+            button.setProperty("quiet", True)
 
-        self.setStyleSheet(f"""
-            QGroupBox::title {{
-                color: {ACCENT};
-                font-weight: bold;
-                padding-top: 2px;
-            }}
-            QGroupBox {{
-                border: 1px solid #555555;
-                border-radius: 4px;
-                margin-top: 12px;
-                padding-top: 14px;
-                font-weight: bold;
-            }}
-            QGroupBox#group_separator {{
-                border: none;
-                margin: 0px;
-                padding: 0px;
-            }}
-            QFrame#group_separator {{
-                color: #555555;
-                max-height: 1px;
-                margin: 2px 4px;
-            }}
-        """)
+        self.btn_motor_stop.setProperty("danger", True)
+        self.btn_init.setProperty("danger", True)
+        self.btn_rst.setProperty("warning", True)
 
-        # 演示按钮: 斜体 + 虚线边框, 区分于正常命令按钮
-        demo_style = """
-            QPushButton {
-                border: 1px dashed #888888;
-                font-style: italic;
-                color: #CCCCCC;
-            }
-            QPushButton:hover {
-                border-color: #AAAAAA;
-                color: #FFFFFF;
-            }
-        """
-        self.btn_demo_abbrev.setStyleSheet(demo_style)
-        self.btn_demo_case.setStyleSheet(demo_style)
+        for button in (self.btn_demo_abbrev, self.btn_demo_case):
+            button.setProperty("demo", True)
 
     # ── 控件使能控制 ──
 

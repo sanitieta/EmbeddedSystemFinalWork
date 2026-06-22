@@ -34,7 +34,6 @@ from PyQt5.QtCore import (
 from PyQt5.QtGui import (
     QBrush,
     QColor,
-    QFont,
     QPainter,
     QPainterPath,
     QPen,
@@ -42,6 +41,7 @@ from PyQt5.QtGui import (
     QPaintEvent,
 )
 from PyQt5.QtWidgets import (
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -372,13 +372,8 @@ class TwinPanel(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setObjectName("TwinPanel")
         self.setWindowTitle("MCU Mirror (Digital Twin)")
-
-        # Panel background — slightly lighter than digit bg for contrast
-        palette = self.palette()
-        palette.setColor(self.backgroundRole(), QColor("#141414"))
-        self.setPalette(palette)
-        self.setAutoFillBackground(True)
 
         # Child widgets
         self.seg_widgets: list[SevenSegWidget] = []
@@ -404,39 +399,99 @@ class TwinPanel(QWidget):
     def _build_ui(self) -> None:
         """Create and layout all child widgets."""
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(8, 8, 8, 8)
-        main_layout.setSpacing(8)
+        main_layout.setContentsMargins(18, 16, 18, 18)
+        main_layout.setSpacing(14)
 
-        # -- Title --
-        title = QLabel("MCU Mirror (Digital Twin)")
-        title.setAlignment(Qt.AlignCenter)
-        title_font = QFont("Microsoft YaHei", 12)
-        title_font.setBold(True)
-        title.setFont(title_font)
-        main_layout.addWidget(title)
+        # -- Panel header --
+        header = QHBoxLayout()
+        header_text = QVBoxLayout()
+        header_text.setSpacing(1)
+        eyebrow = QLabel("LIVE HARDWARE MIRROR")
+        eyebrow.setObjectName("panelEyebrow")
+        title = QLabel("S800 数字孪生")
+        title.setObjectName("panelTitle")
+        subtitle = QLabel("8-DIGIT DISPLAY  ·  GPIO  ·  VIRTUAL INPUT")
+        subtitle.setObjectName("panelSubtitle")
+        header_text.addWidget(eyebrow)
+        header_text.addWidget(title)
+        header_text.addWidget(subtitle)
+        header.addLayout(header_text)
+        header.addStretch()
+        live_badge = QLabel("●  LIVE")
+        live_badge.setObjectName("liveBadge")
+        header.addWidget(live_badge, alignment=Qt.AlignTop)
+        main_layout.addLayout(header)
 
-        # -- 7SEG row --
-        seg_layout = QHBoxLayout()
-        seg_layout.setSpacing(4)
+        # -- Instrument display card --
+        display_card = QFrame()
+        display_card.setObjectName("displayCard")
+        display_layout = QVBoxLayout(display_card)
+        display_layout.setContentsMargins(14, 12, 14, 12)
+        display_layout.setSpacing(9)
+
+        display_meta = QHBoxLayout()
+        display_caption = QLabel("SEGMENT DISPLAY")
+        display_caption.setObjectName("cardCaption")
+        display_hint = QLabel("EVENT STREAM  /  *EVT:DISP")
+        display_hint.setObjectName("cardHint")
+        display_meta.addWidget(display_caption)
+        display_meta.addStretch()
+        display_meta.addWidget(display_hint)
+        display_layout.addLayout(display_meta)
+
+        screen = QFrame()
+        screen.setObjectName("segmentScreen")
+        seg_layout = QHBoxLayout(screen)
+        seg_layout.setContentsMargins(8, 8, 8, 8)
+        seg_layout.setSpacing(2)
         for _ in range(8):
             seg = SevenSegWidget(self)
-            seg.setFixedSize(58, 85)
+            seg.setFixedSize(56, 88)
             self.seg_widgets.append(seg)
             seg_layout.addWidget(seg, alignment=Qt.AlignCenter)
-        main_layout.addLayout(seg_layout)
+        display_layout.addWidget(screen)
 
-        # -- LED row --
+        led_meta = QHBoxLayout()
+        led_caption = QLabel("STATUS BUS")
+        led_caption.setObjectName("cardCaption")
+        led_value = QLabel("LED0 — LED7")
+        led_value.setObjectName("cardHint")
+        led_meta.addWidget(led_caption)
+        led_meta.addStretch()
+        led_meta.addWidget(led_value)
+        display_layout.addLayout(led_meta)
+
+        # -- LED telemetry row --
         led_layout = QHBoxLayout()
-        led_layout.setSpacing(12)
-        for _ in range(8):
+        led_layout.setSpacing(4)
+        for index in range(8):
+            led_cell = QVBoxLayout()
+            led_cell.setSpacing(3)
             led = LedIndicator(self)
             self.led_widgets.append(led)
-            led_layout.addWidget(led, alignment=Qt.AlignCenter)
-        main_layout.addLayout(led_layout)
+            led_label = QLabel(f"{index}")
+            led_label.setObjectName("ledIndex")
+            led_label.setAlignment(Qt.AlignCenter)
+            led_cell.addWidget(led, alignment=Qt.AlignCenter)
+            led_cell.addWidget(led_label)
+            led_layout.addLayout(led_cell)
+        display_layout.addLayout(led_layout)
+        main_layout.addWidget(display_card)
 
-        # -- Matrix keys K1-K8 (4x2 grid) --
+        # -- Matrix keys K1-K8 --
+        input_header = QHBoxLayout()
+        input_title = QLabel("VIRTUAL INPUT MATRIX")
+        input_title.setObjectName("sectionTitle")
+        input_hint = QLabel("点击按键向 MCU 注入输入")
+        input_hint.setObjectName("sectionHint")
+        input_header.addWidget(input_title)
+        input_header.addStretch()
+        input_header.addWidget(input_hint)
+        main_layout.addLayout(input_header)
+
         key_grid = QGridLayout()
-        key_grid.setSpacing(6)
+        key_grid.setHorizontalSpacing(8)
+        key_grid.setVerticalSpacing(8)
         positions: list[tuple[int, int]] = [
             (0, 0), (0, 1), (0, 2), (0, 3),  # K1-K4
             (1, 0), (1, 1), (1, 2), (1, 3),  # K5-K8
@@ -444,25 +499,8 @@ class TwinPanel(QWidget):
         for i, (row, col) in enumerate(positions):
             name: str = _KEY_NAMES[i]
             btn = QPushButton(f"K{i + 1}\n{name}")
-            btn.setMinimumSize(70, 50)
-            btn.setFont(QFont("Microsoft YaHei", 8))
-            btn.setStyleSheet(
-                "QPushButton {"
-                "  background-color: #1E1E1E;"
-                "  color: #AAAAAA;"
-                "  border: 1px solid #3A3A3A;"
-                "  border-radius: 4px;"
-                "  font-family: 'Microsoft YaHei';"
-                "}"
-                "QPushButton:hover {"
-                "  background-color: #2E2E2E;"
-                "  color: #DDDDDD;"
-                "  border: 1px solid #555555;"
-                "}"
-                "QPushButton:pressed {"
-                "  background-color: #3A3A3A;"
-                "}"
-            )
+            btn.setProperty("matrixKey", True)
+            btn.setMinimumSize(86, 54)
             # Lambda default-argument captures `name` at definition time
             btn.clicked.connect(lambda checked, n=name: self._on_key_clicked(n))
             key_grid.addWidget(btn, row, col)
@@ -471,7 +509,7 @@ class TwinPanel(QWidget):
 
         # -- USER1 / USER2 independent keys --
         user_layout = QHBoxLayout()
-        user_layout.setSpacing(16)
+        user_layout.setSpacing(10)
 
         self.user1_btn = self._make_user_button("USER1\n(PJ0)")
         self.user1_btn.clicked.connect(lambda: self._on_key_clicked("USER1"))
@@ -491,27 +529,10 @@ class TwinPanel(QWidget):
 
     @staticmethod
     def _make_user_button(text: str) -> QPushButton:
-        """Create a USER1/USER2 button with the standard blue styling."""
+        """Create a USER1/USER2 button styled by the global theme."""
         btn = QPushButton(text)
-        btn.setMinimumSize(140, 50)
-        btn.setFont(QFont("Microsoft YaHei", 9, QFont.Bold))
-        btn.setStyleSheet(
-            "QPushButton {"
-            "  background-color: #1A2A3A;"
-            "  color: #CCDDEE;"
-            "  border: 1px solid #3A5A8A;"
-            "  border-radius: 4px;"
-            "  font-family: 'Microsoft YaHei';"
-            "}"
-            "QPushButton:hover {"
-            "  background-color: #253545;"
-            "  color: #FFFFFF;"
-            "  border: 1px solid #5A8ACA;"
-            "}"
-            "QPushButton:pressed {"
-            "  background-color: #304050;"
-            "}"
-        )
+        btn.setProperty("userKey", True)
+        btn.setMinimumSize(150, 54)
         return btn
 
     # ------------------------------------------------------------------
@@ -580,18 +601,14 @@ class TwinPanel(QWidget):
         if name in self._highlight_timers:
             self._highlight_timers[name].stop()
 
-        original_style: str = btn.styleSheet()
-        btn.setStyleSheet(
-            original_style
-            + " QPushButton {"
-            "  background-color: #E08020;"
-            "  color: #FFFFFF;"
-            "  border: 2px solid #FFA040;"
-            "}"
-        )
+        btn.setProperty("active", True)
+        btn.style().unpolish(btn)
+        btn.style().polish(btn)
 
         def restore() -> None:
-            btn.setStyleSheet(original_style)
+            btn.setProperty("active", False)
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
             self._highlight_timers.pop(name, None)
 
         timer = QTimer(self)

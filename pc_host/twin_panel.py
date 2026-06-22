@@ -158,7 +158,7 @@ _ASCII_TO_7SEG: dict[str, int] = {
     "X": 0x76,
     "Y": 0x6E,
     "-": 0x40,
-    "_": 0x08,
+    "_": 0x00,  # blank placeholder per MCU protocol convention
     "=": 0x48,
     " ": 0x00,
 }

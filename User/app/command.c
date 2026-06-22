@@ -398,6 +398,22 @@ void ProcessUartCommand(void)
         current_param_idx = 1; // 参数从第二个Token开始
     }
 
+    /* 开机动画期间仅允许 *PING / *RST / HELP / INIT，其余返回 ERROR BUSY */
+    if (g.disp.init_flag && g.uart.num_tokens > 0)
+    {
+        if (!(compareTokens(&g.uart.tokens[0], "*PING", 5) ||
+              compareTokens(&g.uart.tokens[0], "HELP", 4) ||
+              compareTokens(&g.uart.tokens[0], "INIT", 4) ||
+              matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL),
+                           g.uart.num_tokens, "*RST")))
+        {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR BUSY\r\n");
+            g.uart.rx_len = 0;
+            memset(g.uart.rx_buf, 0, sizeof(g.uart.rx_buf));
+            return;
+        }
+    }
+
     // 处理 "*RST" 命令 (复位)
     if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*RST"))
     {
@@ -408,13 +424,14 @@ void ProcessUartCommand(void)
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
         }
     }
 
     // 处理 "*SET:DATE" 命令 (设置日期)
     else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*SET:DATE"))
     {
+        bool syntax_matched = false; /* 是否有字段组合匹配 (区分 PARAM / RANGE) */
         parse_ok = false;
         field_token_idx = current_param_idx; // 字段Token的起始索引
 
@@ -424,6 +441,7 @@ void ProcessUartCommand(void)
             compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "MONTH", 5) &&
             compareFieldKeyword(&g.uart.tokens[field_token_idx + 2], "DATE", 3))
         {
+            syntax_matched = true;
             val_token_idx = field_token_idx + 3;                                                        // 值Token的起始索引
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);                       // 年
             parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str);                   // 月
@@ -442,6 +460,7 @@ void ProcessUartCommand(void)
                  compareFieldKeyword(&g.uart.tokens[field_token_idx], "YEAR", 3) &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "MONTH", 5))
         {
+            syntax_matched = true;
             val_token_idx = field_token_idx + 2;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 年
             parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 月
@@ -462,6 +481,7 @@ void ProcessUartCommand(void)
                  compareFieldKeyword(&g.uart.tokens[field_token_idx], "YEAR", 3) &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "DATE", 3))
         {
+            syntax_matched = true;
             val_token_idx = field_token_idx + 2;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 年
             parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 日
@@ -478,6 +498,7 @@ void ProcessUartCommand(void)
                  compareFieldKeyword(&g.uart.tokens[field_token_idx], "MONTH", 3) &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "DATE", 3))
         {
+            syntax_matched = true;
             val_token_idx = field_token_idx + 2;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 月
             parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 日
@@ -493,6 +514,7 @@ void ProcessUartCommand(void)
         else if (g.uart.num_tokens == field_token_idx + 2 &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx], "YEAR", 3))
         {
+            syntax_matched = true;
             val_token_idx = field_token_idx + 1;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 年
             if (parsed_val[0] >= 2000 && parsed_val[0] <= 2099)
@@ -513,6 +535,7 @@ void ProcessUartCommand(void)
         else if (g.uart.num_tokens == field_token_idx + 2 &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx], "MONTH", 3))
         {
+            syntax_matched = true;
             val_token_idx = field_token_idx + 1;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 月
             if (parsed_val[0] >= 1 && parsed_val[0] <= 12)
@@ -534,6 +557,7 @@ void ProcessUartCommand(void)
         else if (g.uart.num_tokens == field_token_idx + 2 &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx], "DATE", 3))
         {
+            syntax_matched = true;
             val_token_idx = field_token_idx + 1;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 日
             if (is_valid_date(g.clock.year, g.clock.month, (uint8_t)parsed_val[0]))
@@ -565,13 +589,16 @@ void ProcessUartCommand(void)
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid parameter\r\n");
+            UARTStringPutNOBlocking(UART0_BASE,
+                syntax_matched ? (uint8_t *)"ERROR RANGE\r\n"
+                               : (uint8_t *)"ERROR PARAM\r\n");
         }
     }
 
     // 处理 "*SET:TIME" 命令 (设置时间)
     else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*SET:TIME"))
     {
+        bool syntax_matched = false; /* 是否有字段组合匹配 */
         parse_ok = false;
         field_token_idx = current_param_idx;
 
@@ -581,6 +608,7 @@ void ProcessUartCommand(void)
             compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "MINUTE", 3) &&
             compareFieldKeyword(&g.uart.tokens[field_token_idx + 2], "SECOND", 3))
         {
+            syntax_matched = true;
             val_token_idx = field_token_idx + 3;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 时
             parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 分
@@ -599,6 +627,7 @@ void ProcessUartCommand(void)
                  compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 3) &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "MINUTE", 3))
         {
+            syntax_matched = true;
             val_token_idx = field_token_idx + 2;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 时
             parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 分
@@ -615,6 +644,7 @@ void ProcessUartCommand(void)
                  compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 3) &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "SECOND", 3))
         {
+            syntax_matched = true;
             val_token_idx = field_token_idx + 2;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 时
             parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 秒
@@ -631,6 +661,7 @@ void ProcessUartCommand(void)
                  compareFieldKeyword(&g.uart.tokens[field_token_idx], "MINUTE", 3) &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "SECOND", 3))
         {
+            syntax_matched = true;
             val_token_idx = field_token_idx + 2;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 分
             parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 秒
@@ -646,6 +677,7 @@ void ProcessUartCommand(void)
         else if (g.uart.num_tokens == field_token_idx + 2 &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 3))
         {
+            syntax_matched = true;
             val_token_idx = field_token_idx + 1;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 时
             if (parsed_val[0] >= 0 && parsed_val[0] < 24)
@@ -659,6 +691,7 @@ void ProcessUartCommand(void)
         else if (g.uart.num_tokens == field_token_idx + 2 &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx], "MINUTE", 3))
         {
+            syntax_matched = true;
             val_token_idx = field_token_idx + 1;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 分
             if (parsed_val[0] >= 0 && parsed_val[0] < 60)
@@ -672,6 +705,7 @@ void ProcessUartCommand(void)
         else if (g.uart.num_tokens == field_token_idx + 2 &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx], "SECOND", 3))
         {
+            syntax_matched = true;
             val_token_idx = field_token_idx + 1;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 秒
             if (parsed_val[0] >= 0 && parsed_val[0] < 60)
@@ -701,13 +735,16 @@ void ProcessUartCommand(void)
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid parameter\r\n");
+            UARTStringPutNOBlocking(UART0_BASE,
+                syntax_matched ? (uint8_t *)"ERROR RANGE\r\n"
+                               : (uint8_t *)"ERROR PARAM\r\n");
         }
     }
 
     // 处理 "*SET:ALARM" 命令 (设置闹钟)
     else if (matchCommand(&g.uart.tokens[0], (g.uart.num_tokens > 1 ? &g.uart.tokens[1] : NULL), g.uart.num_tokens, "*SET:ALARM"))
     {
+        bool syntax_matched = false; /* 是否有字段组合匹配 */
         parse_ok = false;
         field_token_idx = current_param_idx;
 
@@ -717,6 +754,7 @@ void ProcessUartCommand(void)
             compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "MINUTE", 3) &&
             compareFieldKeyword(&g.uart.tokens[field_token_idx + 2], "SECOND", 3))
         {
+            syntax_matched = true;
             val_token_idx = field_token_idx + 3;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 时
             parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 分
@@ -735,6 +773,7 @@ void ProcessUartCommand(void)
                  compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 3) &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "MINUTE", 3))
         {
+            syntax_matched = true;
             val_token_idx = field_token_idx + 2;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 时
             parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 分
@@ -751,6 +790,7 @@ void ProcessUartCommand(void)
                  compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 3) &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "SECOND", 3))
         {
+            syntax_matched = true;
             val_token_idx = field_token_idx + 2;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 时
             parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 秒
@@ -767,6 +807,7 @@ void ProcessUartCommand(void)
                  compareFieldKeyword(&g.uart.tokens[field_token_idx], "MINUTE", 3) &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "SECOND", 3))
         {
+            syntax_matched = true;
             val_token_idx = field_token_idx + 2;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str);     // 分
             parsed_val[1] = atoi((char *)g.uart.tokens[val_token_idx + 1].token_str); // 秒
@@ -782,6 +823,7 @@ void ProcessUartCommand(void)
         else if (g.uart.num_tokens == field_token_idx + 2 &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 3))
         {
+            syntax_matched = true;
             val_token_idx = field_token_idx + 1;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 时
             if (parsed_val[0] >= 0 && parsed_val[0] < 24)
@@ -795,6 +837,7 @@ void ProcessUartCommand(void)
         else if (g.uart.num_tokens == field_token_idx + 2 &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx], "MINUTE", 3))
         {
+            syntax_matched = true;
             val_token_idx = field_token_idx + 1;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 分
             if (parsed_val[0] >= 0 && parsed_val[0] < 60)
@@ -808,6 +851,7 @@ void ProcessUartCommand(void)
         else if (g.uart.num_tokens == field_token_idx + 2 &&
                  compareFieldKeyword(&g.uart.tokens[field_token_idx], "SECOND", 3))
         {
+            syntax_matched = true;
             val_token_idx = field_token_idx + 1;
             parsed_val[0] = atoi((char *)g.uart.tokens[val_token_idx].token_str); // 秒
             if (parsed_val[0] >= 0 && parsed_val[0] < 60)
@@ -838,7 +882,9 @@ void ProcessUartCommand(void)
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid parameter\r\n");
+            UARTStringPutNOBlocking(UART0_BASE,
+                syntax_matched ? (uint8_t *)"ERROR RANGE\r\n"
+                               : (uint8_t *)"ERROR PARAM\r\n");
         }
     }
 
@@ -867,12 +913,12 @@ void ProcessUartCommand(void)
             }
             else // 无效参数
             {
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid parameter\r\n");
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR PARAM\r\n");
             }
         }
         else // 命令格式错误
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
         }
     }
 
@@ -899,12 +945,12 @@ void ProcessUartCommand(void)
             }
             else
             {
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid parameter\r\n");
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR PARAM\r\n");
             }
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
         }
     }
 
@@ -922,14 +968,18 @@ void ProcessUartCommand(void)
             while (payload_len > 0 && (g.uart.rx_buf[payload_offset + payload_len - 1U] == '\r' || g.uart.rx_buf[payload_offset + payload_len - 1U] == '\n'))
                 payload_len--;
             if (payload_len > 32)
-                payload_len = 32;
-
-            Display_StartMessage(&g.uart.rx_buf[payload_offset], payload_len);
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
+            {
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR LEN\r\n");
+            }
+            else
+            {
+                Display_StartMessage(&g.uart.rx_buf[payload_offset], payload_len);
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
+            }
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
         }
     }
 
@@ -956,7 +1006,7 @@ void ProcessUartCommand(void)
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid parameter\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR PARAM\r\n");
         }
     }
 
@@ -988,12 +1038,12 @@ void ProcessUartCommand(void)
             }
             else
             {
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid parameter\r\n");
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR PARAM\r\n");
             }
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
         }
     }
 
@@ -1064,12 +1114,12 @@ void ProcessUartCommand(void)
             }
             else
             {
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid parameter\r\n");
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR PARAM\r\n");
             }
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
         }
     }
 
@@ -1111,7 +1161,7 @@ void ProcessUartCommand(void)
                 }
             }
             if (!found_arg)
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid parameter");
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR PARAM");
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
         }
     }
@@ -1153,7 +1203,7 @@ void ProcessUartCommand(void)
                 }
             }
             if (!found_arg)
-                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid parameter");
+                UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR PARAM");
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
         }
     }
@@ -1167,7 +1217,7 @@ void ProcessUartCommand(void)
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
         }
     }
 
@@ -1180,7 +1230,7 @@ void ProcessUartCommand(void)
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
         }
     }
 
@@ -1193,7 +1243,7 @@ void ProcessUartCommand(void)
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
         }
     }
 
@@ -1207,7 +1257,7 @@ void ProcessUartCommand(void)
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
         }
     }
 
@@ -1221,7 +1271,7 @@ void ProcessUartCommand(void)
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
         }
     }
 
@@ -1235,7 +1285,7 @@ void ProcessUartCommand(void)
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
         }
     }
 
@@ -1249,7 +1299,7 @@ void ProcessUartCommand(void)
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
         }
     }
 
@@ -1266,7 +1316,7 @@ void ProcessUartCommand(void)
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
         }
     }
 
@@ -1276,7 +1326,7 @@ void ProcessUartCommand(void)
         if (g.uart.num_tokens == current_param_idx)
             SysCtlReset(); // 系统复位
         else
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
     }
 
     // 处理 "*PING" 命令 (连接保活)
@@ -1325,7 +1375,7 @@ void ProcessUartCommand(void)
         }
         else
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Invalid format\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
         }
     }
     // 处理 "HELP" 命令 (显示帮助)
@@ -1358,7 +1408,7 @@ void ProcessUartCommand(void)
     {
         if (g.uart.num_tokens > 0)
         {
-            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR Unknown command\r\n");
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
         }
     }
 

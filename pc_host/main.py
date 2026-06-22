@@ -46,6 +46,7 @@ class MainWindow(QMainWindow):
         # ---- 状态缓存 ----
         self._current_format: str = "LEFT"
         self._alarm_time: str = ""
+        self._dashboard_window: QWidget | None = None
 
         # ---- 核心组件 ----
         self.serial_worker = SerialWorker()
@@ -406,13 +407,15 @@ class MainWindow(QMainWindow):
             self.log_panel.add_error(f"天气: {msg}")
 
     def _on_dashboard(self):
-        """打开数据看板"""
-        self.status_bar.showMessage("数据看板 — 事件记录保存在 logs/events.csv", 3000)
-        # 尝试嵌入 matplotlib 图表对话框
+        """切换数据看板的打开/关闭状态。"""
         self._show_dashboard_dialog()
 
     def _show_dashboard_dialog(self):
-        """弹出数据看板对话框 (DashboardWindow with matplotlib charts)"""
+        """以单实例方式打开数据看板；已打开时再次调用则关闭。"""
+        if self._dashboard_window is not None:
+            self._dashboard_window.close()
+            return
+
         from dashboard import DashboardWindow
 
         # 确保至少有一条数据展示效果 (否则空图表让人困惑)
@@ -423,12 +426,18 @@ class MainWindow(QMainWindow):
         win = DashboardWindow(self.dashboard, self)
         win.setWindowTitle("数据可视化看板 (E4)")
         win.setAttribute(Qt.WA_DeleteOnClose)
+        win.destroyed.connect(self._on_dashboard_closed)
+        self._dashboard_window = win
         win.show()
+        self.btn_dashboard.setText("⌁  关闭看板")
+        self.btn_dashboard.setToolTip("关闭数据看板")
+        self.status_bar.showMessage("数据看板 — 事件记录保存在 logs/events.csv", 3000)
 
-        # 保持引用防止过早回收
-        if not hasattr(self, "_dashboard_windows"):
-            self._dashboard_windows = []
-        self._dashboard_windows.append(win)
+    def _on_dashboard_closed(self):
+        """看板销毁后恢复按钮和单实例状态。"""
+        self._dashboard_window = None
+        self.btn_dashboard.setText("⌁  数据看板")
+        self.btn_dashboard.setToolTip("查看事件统计图表")
 
     # ═══════════════════════════════════════════════════════════════
     # 命令发送处理

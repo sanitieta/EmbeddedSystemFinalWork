@@ -500,6 +500,7 @@ class TwinPanel(QWidget):
             name: str = _KEY_NAMES[i]
             btn = QPushButton(f"K{i + 1}\n{name}")
             btn.setProperty("matrixKey", True)
+            btn.setFocusPolicy(Qt.NoFocus)
             btn.setMinimumSize(86, 54)
             # Lambda default-argument captures `name` at definition time
             btn.clicked.connect(lambda checked, n=name: self._on_key_clicked(n))
@@ -532,6 +533,7 @@ class TwinPanel(QWidget):
         """Create a USER1/USER2 button styled by the global theme."""
         btn = QPushButton(text)
         btn.setProperty("userKey", True)
+        btn.setFocusPolicy(Qt.NoFocus)
         btn.setMinimumSize(150, 54)
         return btn
 

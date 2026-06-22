@@ -170,8 +170,10 @@ class ControlPanel(QWidget):
         alarm_layout.addWidget(self.alarm_second, 0, 5)
 
         self.btn_alarm_set = QPushButton("设置闹钟")
+        self.btn_alarm_off = QPushButton("关闭闹钟")
         self.btn_alarm_get = QPushButton("获取闹钟")
         alarm_layout.addWidget(self.btn_alarm_set, 1, 1, 1, 2)
+        alarm_layout.addWidget(self.btn_alarm_off, 1, 3, 1, 2)
         alarm_layout.addWidget(self.btn_alarm_get, 1, 3, 1, 2)
         alarm_group.setLayout(alarm_layout)
         layout.addWidget(alarm_group)
@@ -300,6 +302,8 @@ class ControlPanel(QWidget):
 
         # 闹钟
         self.btn_alarm_set.clicked.connect(self._on_alarm_set)
+        self.btn_alarm_off.clicked.connect(lambda: self.send_command.emit(
+            self.protocol.build_set_alarm_off()))
         self.btn_alarm_get.clicked.connect(self._on_alarm_get)
 
         # 显示/格式/模式

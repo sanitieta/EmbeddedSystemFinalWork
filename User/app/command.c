@@ -761,7 +761,19 @@ void ProcessUartCommand(void)
         parse_ok = false;
         field_token_idx = current_param_idx;
 
+        /* *SET:ALARM OFF — 关闭闹钟 (设 alm_hh=25 为哨兵值) */
+        if (g.uart.num_tokens == field_token_idx + 1 &&
+            compareTokens(&g.uart.tokens[field_token_idx], "OFF", 3))
+        {
+            g.clock.alm_hh = 25;
+            g.clock.alm_mm = 0;
+            g.clock.alm_ss = 0;
+            syntax_matched = true;
+            parse_ok = true;
+        }
+
         // 匹配 "HOUR MINUTE SECOND HH MM SS" 格式
+        else if (g.uart.num_tokens == field_token_idx + 6 &&
         if (g.uart.num_tokens == field_token_idx + 6 &&
             compareFieldKeyword(&g.uart.tokens[field_token_idx], "HOUR", 3) &&
             compareFieldKeyword(&g.uart.tokens[field_token_idx + 1], "MINUTE", 3) &&
@@ -876,21 +888,28 @@ void ProcessUartCommand(void)
 
         if (parse_ok) // 如果解析成功，停止闹钟，保存原始值并发送成功消息
         {
-            uint8_t v[9];
             StopAlarmRinging(false);
             g.clock.original_alm_hh = g.clock.alm_hh;
             g.clock.original_alm_mm = g.clock.alm_mm;
             g.clock.original_alm_ss = g.clock.alm_ss;
             g.clock.unsaved_changes_active = false;
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"OK\r\n");
-            v[0] = (uint8_t)(g.clock.alm_hh / 10) + '0';
-            v[1] = (uint8_t)(g.clock.alm_hh % 10) + '0';
-            v[2] = '.'; v[3] = (uint8_t)(g.clock.alm_mm / 10) + '0';
-            v[4] = (uint8_t)(g.clock.alm_mm % 10) + '0';
-            v[5] = '.'; v[6] = (uint8_t)(g.clock.alm_ss / 10) + '0';
-            v[7] = (uint8_t)(g.clock.alm_ss % 10) + '0';
-            v[8] = '\0';
-            Display_SendEditEvent("ALARM", v);
+            if (g.clock.alm_hh == 25) /* 闹钟已关闭 */
+            {
+                Display_SendEditEvent("ALARM", (const uint8_t *)"xx:xx:xx");
+            }
+            else
+            {
+                uint8_t v[9];
+                v[0] = (uint8_t)(g.clock.alm_hh / 10) + '0';
+                v[1] = (uint8_t)(g.clock.alm_hh % 10) + '0';
+                v[2] = '.'; v[3] = (uint8_t)(g.clock.alm_mm / 10) + '0';
+                v[4] = (uint8_t)(g.clock.alm_mm % 10) + '0';
+                v[5] = '.'; v[6] = (uint8_t)(g.clock.alm_ss / 10) + '0';
+                v[7] = (uint8_t)(g.clock.alm_ss % 10) + '0';
+                v[8] = '\0';
+                Display_SendEditEvent("ALARM", v);
+            }
             UpdateTimeAndDisplayBuffers();
         }
         else
@@ -1479,7 +1498,7 @@ void ProcessUartCommand(void)
             "*RST                                       : Reset protocol state.\r\n"
             "*SET:DATE YEAR MONTH DATE YYYY MM DD      : Set date (partial fields supported).\r\n"
             "*SET:TIME HOUR MINUTE SECOND HH MM SS     : Set time (partial fields supported).\r\n"
-            "*SET:ALARM HOUR MINUTE SECOND HH MM SS    : Set alarm (partial fields supported).\r\n"
+            "*SET:ALARM HOUR MINUTE SECOND HH MM SS    : Set alarm; OFF to disable.\r\n"
             "*SET:DISPLAY ON/OFF                       : Turn 7-segment display on/off.\r\n"
             "*SET:FORMAT LEFT/RIGHT                    : Set display direction.\r\n"
             "*SET:MSG <text>                           : Show temporary message (max 32 bytes).\r\n"

@@ -182,6 +182,11 @@ class Protocol:
         return "*GET:TIME"
 
     @staticmethod
+    def build_set_alarm_off() -> str:
+        """关闭闹钟"""
+        return "*SET:ALARM OFF"
+
+    @staticmethod
     def build_get_alarm() -> str:
         return "*GET:ALARM"
 

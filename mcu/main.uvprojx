@@ -404,108 +404,6 @@
         </Group>
         <Group>
           <GroupName>User</GroupName>
-          <Files>
-            <File>
-              <FileName>callback.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\callback.c</FilePath>
-            </File>
-          </Files>
-        </Group>
-        <Group>
-          <GroupName>User/base</GroupName>
-          <Files>
-            <File>
-              <FileName>board.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\base\board.c</FilePath>
-            </File>
-            <File>
-              <FileName>delay.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\base\delay.c</FilePath>
-            </File>
-            <File>
-              <FileName>hibernate_rtc.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\base\hibernate_rtc.c</FilePath>
-            </File>
-            <File>
-              <FileName>i2c_bus.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\base\i2c_bus.c</FilePath>
-            </File>
-            <File>
-              <FileName>pwm_buzzer.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\base\pwm_buzzer.c</FilePath>
-            </File>
-            <File>
-              <FileName>stepper.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\base\stepper.c</FilePath>
-            </File>
-            <File>
-              <FileName>timebase.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\base\timebase.c</FilePath>
-            </File>
-            <File>
-              <FileName>uart_port.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\base\uart_port.c</FilePath>
-            </File>
-          </Files>
-        </Group>
-        <Group>
-          <GroupName>User/app</GroupName>
-          <Files>
-            <File>
-              <FileName>alarm.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\app\alarm.c</FilePath>
-            </File>
-            <File>
-              <FileName>app.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\app\app.c</FilePath>
-            </File>
-            <File>
-              <FileName>app_state.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\app\app_state.c</FilePath>
-            </File>
-            <File>
-              <FileName>boot_sequence.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\app\boot_sequence.c</FilePath>
-            </File>
-            <File>
-              <FileName>button_logic.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\app\button_logic.c</FilePath>
-            </File>
-            <File>
-              <FileName>command.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\app\command.c</FilePath>
-            </File>
-            <File>
-              <FileName>datetime.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\app\datetime.c</FilePath>
-            </File>
-            <File>
-              <FileName>display.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\app\display.c</FilePath>
-            </File>
-            <File>
-              <FileName>melody.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\app\melody.c</FilePath>
-            </File>
-          </Files>
         </Group>
         <Group>
           <GroupName>::CMSIS</GroupName>
@@ -567,5 +465,14 @@
       </file>
     </files>
   </RTE>
+
+  <LayerInfo>
+    <Layers>
+      <Layer>
+        <LayName>main</LayName>
+        <LayPrjMark>1</LayPrjMark>
+      </Layer>
+    </Layers>
+  </LayerInfo>
 
 </Project>

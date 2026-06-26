@@ -29,8 +29,7 @@
 #include "display.h"
 #include "melody.h"
 
-static const uint8_t kStudentIdFirst[8] = {0x6D, 0x5B, 0x66, 0x3F, 0x4F, 0x06, 0x6F, 0x06};  // 52403191
-static const uint8_t kStudentIdSecond[8] = {0x4F, 0x06, 0x6F, 0x06, 0x3F, 0x07, 0x07, 0x5B}; // 31910772
+static const uint8_t kStudentId[8] = {0x4F, 0x06, 0x6F, 0x06, 0x3F, 0x07, 0x07, 0x5B}; // 31910772
 static const uint8_t kNameXuHaoran[8] = {0x76, 0x3E, 0x76, 0x77, 0x3F, 0x50, 0x77, 0x54};    // XUHAORAN
 static const uint8_t kVersion[8] = {0x00, 0x00, 0x3E, 0x06 | 0x80, 0x3F, 0x00, 0x00, 0x00};   // v1.0
 
@@ -167,15 +166,12 @@ void RunInitializationSequence(void)
             OutputBootFrame(blank_frame, 0x00);
             break;
         case 2:
-            OutputBootFrame(kStudentIdFirst, 0x00);
+            OutputBootFrame(kStudentId, 0x00);
             break;
         case 3:
-            OutputBootFrame(kStudentIdSecond, 0x00);
-            break;
-        case 4:
             OutputBootFrame(kNameXuHaoran, 0x00);
             break;
-        case 5:
+        case 4:
             OutputBootFrame(kVersion, 0x00);
             break;
         default:

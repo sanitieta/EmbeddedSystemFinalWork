@@ -1489,6 +1489,17 @@ void ProcessUartCommand(void)
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
         }
     }
+    // 处理 "1" / "2" 快捷测试命令 (发送 1 显示全 1, 发送 2 显示全 2)
+    else if (g.uart.num_tokens == 1 && g.uart.tokens[0].token_len == 1)
+    {
+        if (g.uart.tokens[0].token_str[0] == '1')
+            Display_StartMessage((const uint8_t *)"11111111", 8);
+        else if (g.uart.tokens[0].token_str[0] == '2')
+            Display_StartMessage((const uint8_t *)"22222222", 8);
+        else
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
+    }
+
     // 处理 "HELP" 命令 (显示帮助)
     else if (compareTokens(&g.uart.tokens[0], "HELP", 4))
     {

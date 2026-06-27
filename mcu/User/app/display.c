@@ -327,6 +327,23 @@ void Display_UpdateStatusLeds(void)
         return;
     }
 
+    /* K5 (DISP) 按下时 LED0-LED7 全亮, 松开恢复 */
+    if (g.in.state[4])
+    {
+        pattern = 0xFF;
+        g.disp.current_led = pattern;
+        Display_SetLedOutput(pattern);
+        if (pattern != g.disp.last_sent_led)
+        {
+            g.disp.last_sent_led = pattern;
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:LED ");
+            UARTCharPutBlocking(UART0_BASE, HexDigit((uint8_t)(pattern >> 4)));
+            UARTCharPutBlocking(UART0_BASE, HexDigit(pattern));
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
+        }
+        return;
+    }
+
     pattern = 0x00;
     if ((g.timer.tick % V_T1s) < V_T500ms)
     {

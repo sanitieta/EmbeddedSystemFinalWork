@@ -1281,7 +1281,21 @@ void Display_UpdateStatusLeds(void) {
         }
         return;
     }
-
+    if (g.in.state[4])
+    {
+        pattern = 0xFF;
+        g.disp.current_led = pattern;
+        Display_SetLedOutput(pattern);
+        if (pattern != g.disp.last_sent_led)
+        {
+            g.disp.last_sent_led = pattern;
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"*EVT:LED ");
+            UARTCharPutBlocking(UART0_BASE, HexDigit((uint8_t)(pattern >> 4)));
+            UARTCharPutBlocking(UART0_BASE, HexDigit(pattern));
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"\r\n");
+        }
+        return;
+    }
     pattern = 0x00;
     if ((g.timer.tick % V_T1s) < V_T500ms) {
         pattern |= 0x01;
@@ -2003,16 +2017,16 @@ void RunInitializationSequence(void) {
             case 1:
                 OutputBootFrame(blank_frame, 0x00);
                 break;
+            // case 2:
+                // OutputBootFrame(kStudentIdFirst, 0x00);
+                // break;
             case 2:
-                OutputBootFrame(kStudentIdFirst, 0x00);
-                break;
-            case 3:
                 OutputBootFrame(kStudentIdSecond, 0x00);
                 break;
-            case 4:
+            case 3:
                 OutputBootFrame(kNameXuHaoran, 0x00);
                 break;
-            case 5:
+            case 4:
                 OutputBootFrame(kVersion, 0x00);
                 break;
             default:
@@ -3812,6 +3826,17 @@ void ProcessUartCommand(void) {
             UARTStringPutNOBlocking(UART0_BASE, (uint8_t*)"ERROR SYNTAX\r\n");
         }
     }
+
+    else if (g.uart.num_tokens == 1 && g.uart.tokens[0].token_len == 1) {
+        if (g.uart.tokens[0].token_str[0] == '1') {
+            Display_StartMessage((const uint8_t *)"11111111", 8);
+        }else if (g.uart.tokens[0].token_str[0] == '2') {
+            Display_StartMessage((const uint8_t *)"22222222", 8);
+        }else {
+            UARTStringPutNOBlocking(UART0_BASE, (uint8_t *)"ERROR SYNTAX\r\n");
+        }
+    }
+
     // 处理 "HELP" 命令 (显示帮助)
     else if (compareTokens(&g.uart.tokens[0], "HELP", 4)) {
         UARTStringPutNOBlocking(UART0_BASE, (uint8_t*)"OK\r\n");
